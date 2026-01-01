@@ -1,0 +1,44 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dependency directories
+node_modules/
+dist/
+.env
+.env.local
+
+# SQLite Database (Crucial so you don't overwrite your data on git pull)
+backend/*.db
+backend/*.db-journal
+backend/*.sqlite
+backend/node_modules/
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Build outputs
+frontend/dist/
+backend/dist/
+
+# Drizzle migrations (Keep the 'drizzle' folder, ignore specific temp files)
+backend/drizzle/meta
+
+node_modules/
+dist/
+.env
+*.db
+*.sqlite
+*.db-journal
+
+frontend/node_modules/
