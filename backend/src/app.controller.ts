@@ -56,7 +56,7 @@ export class AppController {
     // The payload keys must match the schema (date, expense, to, total, etc.)
     // Drizzle will handle the mapping automatically if the JSON is correct.
     try {
-      const res = await this.db.insert(transactions).values(payload).returning();
+      const res = await this.db.insert(transactions).values(payload.map(v => ({...v, price: v.total}))).returning();
       return { success: true, count: res.length };
     } catch (e) {
       this.logger.error(e);
@@ -95,5 +95,31 @@ export class AppController {
       .execute();
 
     return data;
+  }
+
+  @Get('dashboard')
+  async getDashboard(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string
+  ) {
+    const data = await this.db.select()
+      .from(transactions)
+      .where(
+        and(
+          gte(transactions.date, startDate),
+          lte(transactions.date, endDate)
+        )
+      ).execute();
+
+    // Aggregate by category
+    const categories = data.reduce((acc, curr) => {
+      acc[curr.category] = (acc[curr.category] || 0) + curr.total;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Sort by highest spending
+    return Object.entries(categories)
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total);
   }
 }
