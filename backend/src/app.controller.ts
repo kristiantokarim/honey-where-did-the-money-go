@@ -1,5 +1,5 @@
 import { 
-  Controller, Post, Get, UploadedFile, UseInterceptors, 
+  Controller, Post, Get, UploadedFile, UseInterceptors, Query,
   Body, BadRequestException, Logger, Inject 
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -7,7 +7,7 @@ import { ParserService } from './parser.service';
 import { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { transactions } from './db/schema';
 import * as schema from './db/schema';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, desc, gte, lte } from 'drizzle-orm';
 
 @Controller('transactions')
 export class AppController {
@@ -71,5 +71,29 @@ export class AppController {
       orderBy: (transactions, { desc }) => [desc(transactions.date)],
       limit: 50,
     });
+  }
+
+  @Get('history')
+  async getHistory(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string
+  ) {
+    // Default to current month if no dates provided
+    const now = new Date();
+    const start = startDate || new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    const end = endDate || new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+    const data = await this.db.select()
+      .from(transactions)
+      .where(
+        and(
+          gte(transactions.date, start),
+          lte(transactions.date, end)
+        )
+      )
+      .orderBy(desc(transactions.date)) // Newest first
+      .execute();
+
+    return data;
   }
 }

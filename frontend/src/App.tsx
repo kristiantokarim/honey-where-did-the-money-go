@@ -1,35 +1,60 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
   Upload, CheckCircle2, Trash2, Loader2,
-  User, Store, Tag
+  AlertCircle, Tag, User, Store, Calendar,
+  LayoutList, ScanLine, Filter, ArrowRight, Copy, RefreshCcw
 } from 'lucide-react';
 
-const BACKEND_URL = `http://localhost:3000`; // Update your IP
+// REMINDER: Update this to your Mac IP
+const BACKEND_URL = `http://localhost:3000`; 
 
+// --- TYPES ---
 interface Transaction {
+  id?: number;
   date: string;
-  expense: string;     // Column: Expense
-  to: string;          // Column: To (Merchant)
-  category: string;    // Column: Category
-  total: number;       // Column: Total
-  price: number;       // Column: Price (Hidden default = total)
-  quantity: number;    // Column: Quantity (Hidden default = 1)
-  payment: string;     // Column: Payment
-  by: string;          // Column: By (Kris/Iven)
-  remarks: string;     // Column: Remarks
+  expense: string;     // Spreadsheet: Expense
+  to: string;          // Spreadsheet: To (Merchant)
+  category: string;    // Spreadsheet: Category
+  total: number;       // Spreadsheet: Total
+  payment: string;     // Spreadsheet: Payment
+  by: string;          // Spreadsheet: By
+  remarks: string;     // Spreadsheet: Remarks
   status?: string;
   isValid?: boolean;
   isDuplicate?: boolean;
 }
 
+// --- UTILS ---
+const getFirstDayOfMonth = () => {
+  const date = new Date();
+  return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0];
+};
+
+const getLastDayOfMonth = () => {
+  const date = new Date();
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0];
+};
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount);
+};
+
 export default function App() {
+  // Navigation State
+  const [activeTab, setActiveTab] = useState<'scan' | 'history'>('scan');
+
+  // Scanner State
   const [loading, setLoading] = useState(false);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  
-  // Default user profile
+  const [scanData, setScanData] = useState<Transaction[]>([]);
   const [defaultUser, setDefaultUser] = useState("Kris");
 
+  // History State
+  const [historyData, setHistoryData] = useState<Transaction[]>([]);
+  const [dateFilter, setDateFilter] = useState({ start: getFirstDayOfMonth(), end: getLastDayOfMonth() });
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // --- HANDLERS: SCANNER ---
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -39,19 +64,23 @@ export default function App() {
     formData.append('file', file);
 
     try {
+      // 1. AI Parsing
       const res = await axios.post(`${BACKEND_URL}/transactions/upload`, formData);
-      const parsedData = res.data.map((item: any) => ({
+      const parsedData = res.data;
+
+      // 2. Duplicate Check
+      const dupRes = await axios.post(`${BACKEND_URL}/transactions/check-duplicates`, parsedData);
+
+      // 3. Enrich with UI defaults and Duplicate status
+      const enrichedData = parsedData.map((item: any, idx: number) => ({
         ...item,
-        price: item.total,
-        quantity: 1,
-        by: defaultUser, // Auto-fill current user
+        by: defaultUser,
         remarks: "",
-        isValid: item.isValid ?? true
+        isValid: item.isValid ?? true,
+        isDuplicate: dupRes.data[idx].exists || (item.isValid === false)
       }));
 
-      // Dedupe check logic here (omitted for brevity, same as before)
-      // For now, just set data:
-      setTransactions(parsedData);
+      setScanData(enrichedData);
     } catch (err) {
       alert("Error processing image.");
     } finally {
@@ -59,21 +88,32 @@ export default function App() {
     }
   };
 
-  const updateField = (index: number, field: keyof Transaction, value: any) => {
-    const updated = [...transactions];
+  const updateScanField = (index: number, field: keyof Transaction, value: any) => {
+    const updated = [...scanData];
     updated[index] = { ...updated[index], [field]: value };
-    setTransactions(updated);
+    setScanData(updated);
+  };
+
+  const toggleDuplicate = (index: number) => {
+    const updated = [...scanData];
+    updated[index].isDuplicate = !updated[index].isDuplicate;
+    setScanData(updated);
   };
 
   const saveToDatabase = async () => {
-    const itemsToSave = transactions.filter(tx => !tx.isDuplicate);
-    if (!itemsToSave.length) return;
-
+    const itemsToSave = scanData.filter(tx => !tx.isDuplicate);
+    if (!itemsToSave.length) {
+        alert("No new items to save (all duplicates or empty).");
+        return;
+    }
+    
     try {
       setLoading(true);
       await axios.post(`${BACKEND_URL}/transactions/confirm`, itemsToSave);
       alert(`✅ Saved ${itemsToSave.length} entries!`);
-      setTransactions([]);
+      setScanData([]);
+      setActiveTab('history');
+      fetchHistory();
     } catch (err) {
       alert("Save failed.");
     } finally {
@@ -81,162 +121,246 @@ export default function App() {
     }
   };
 
+  // --- HANDLERS: HISTORY ---
+  const fetchHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await axios.get(`${BACKEND_URL}/transactions/history`, {
+        params: { startDate: dateFilter.start, endDate: dateFilter.end }
+      });
+      setHistoryData(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'history') fetchHistory();
+  }, [activeTab, dateFilter]);
+
+  const calculateTotal = (data: Transaction[]) => data.reduce((acc, curr) => acc + curr.total, 0);
+
   return (
-    <div className="min-h-screen bg-[#F8F9FD] text-slate-900 pb-32">
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-20 shadow-sm">
+    <div className="min-h-screen bg-[#F8F9FD] text-slate-900 pb-24 font-sans">
+      
+      {/* FIXED TOP NAV */}
+      <nav className="bg-white border-b border-slate-200 px-6 py-4 sticky top-0 z-30 shadow-sm">
         <div className="max-w-lg mx-auto flex justify-between items-center">
           <h1 className="text-xl font-black text-blue-600 tracking-tight">EXP_LEDGER</h1>
-          <select 
-            className="bg-slate-100 text-xs font-bold px-2 py-1 rounded-lg border-none outline-none text-slate-600"
-            value={defaultUser}
-            onChange={(e) => setDefaultUser(e.target.value)}
-          >
-            <option value="Kris">👤 Kris</option>
-            <option value="Iven">👤 Iven</option>
-          </select>
+          {activeTab === 'scan' && (
+            <select 
+              className="bg-slate-100 text-xs font-bold px-2 py-1 rounded-lg border-none outline-none text-slate-600"
+              value={defaultUser}
+              onChange={(e) => setDefaultUser(e.target.value)}
+            >
+              <option value="Kris">👤 Kris</option>
+              <option value="Iven">👤 Iven</option>
+            </select>
+          )}
         </div>
       </nav>
 
       <main className="max-w-lg mx-auto p-4">
-        {transactions.length === 0 && (
-          <label className="mt-8 block cursor-pointer group">
-            <div className="h-64 w-full border-4 border-dashed border-slate-200 rounded-[2rem] bg-white flex flex-col items-center justify-center group-active:scale-95 transition-all group-hover:border-blue-300">
-              {loading ? <Loader2 className="w-12 h-12 text-blue-500 animate-spin" /> : (
-                <>
-                  <Upload size={32} className="text-blue-600 mb-2" />
-                  <p className="font-bold uppercase tracking-tight text-slate-600">Scan Receipt</p>
-                </>
-              )}
-            </div>
-            <input type="file" className="hidden" onChange={handleFileUpload} accept="image/*" />
-          </label>
-        )}
-
-        <div className="space-y-4">
-          {transactions.map((tx, index) => (
-            <div key={index} className={`bg-white rounded-3xl p-5 border transition-all ${tx.isDuplicate ? 'border-orange-200 ring-4 ring-orange-50' : 'border-slate-100 shadow-sm'}`}>
-              
-              {/* Header: Date & Valid Status */}
-              <div className="flex justify-between items-center mb-4">
-                 <input
-                    type="date"
-                    className="text-xs font-bold text-slate-500 bg-slate-50 rounded-lg px-2 py-1 outline-none focus:bg-blue-50 transition-colors"
-                    value={tx.date}
-                    onChange={(e) => updateField(index, 'date', e.target.value)}
-                  />
-                  <button onClick={() => setTransactions(transactions.filter((_, i) => i !== index))}>
-                    <Trash2 size={16} className="text-slate-300 hover:text-red-400" />
-                  </button>
-              </div>
-
-              {/* Main Amount */}
-              <div className="mb-6">
-                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest block mb-1">Total Expense</span>
-                <div className="flex items-center text-3xl font-mono font-bold text-slate-800 tracking-tighter">
-                  <span className="text-lg text-slate-300 mr-1">Rp</span>
-                  <input
-                    type="number"
-                    className="bg-transparent outline-none w-full placeholder-slate-200"
-                    value={tx.total}
-                    onChange={(e) => updateField(index, 'total', Number(e.target.value))}
-                  />
+        
+        {/* === TAB: SCANNER === */}
+        {activeTab === 'scan' && (
+          <div className="space-y-4">
+            {scanData.length === 0 && (
+              <label className="mt-8 block cursor-pointer group">
+                <div className="h-64 w-full border-4 border-dashed border-slate-200 rounded-[2rem] bg-white flex flex-col items-center justify-center group-active:scale-95 transition-all group-hover:border-blue-300">
+                  {loading ? <Loader2 className="w-12 h-12 text-blue-500 animate-spin" /> : (
+                    <>
+                      <Upload size={32} className="text-blue-600 mb-2" />
+                      <p className="font-bold uppercase tracking-tight text-slate-600">Scan Receipt</p>
+                    </>
+                  )}
                 </div>
-              </div>
+                <input type="file" className="hidden" onChange={handleFileUpload} accept="image/*" />
+              </label>
+            )}
 
-              {/* Grid Form */}
-              <div className="grid grid-cols-1 gap-3">
+            {scanData.map((tx, index) => (
+              <div key={index} className={`bg-white rounded-3xl p-5 border transition-all ${tx.isDuplicate ? 'border-orange-200 ring-4 ring-orange-50 bg-orange-50/10' : 'border-slate-100 shadow-sm'}`}>
                 
-                {/* 1. Item Name (Expense) */}
-                <div className="relative flex items-center bg-slate-50 rounded-xl px-3 py-2.5 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-                  <Tag size={14} className="text-slate-400 mr-3" />
-                  <input 
-                    className="flex-1 bg-transparent text-sm font-bold text-slate-700 outline-none"
-                    placeholder="Item Name (Expense)"
-                    value={tx.expense}
-                    onChange={(e) => updateField(index, 'expense', e.target.value)}
-                  />
-                </div>
-
-                {/* 2. Merchant (To) */}
-                <div className="relative flex items-center bg-slate-50 rounded-xl px-3 py-2.5 focus-within:bg-white focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-                  <Store size={14} className="text-slate-400 mr-3" />
-                  <input 
-                    className="flex-1 bg-transparent text-sm font-bold text-slate-700 outline-none"
-                    placeholder="Merchant (To)"
-                    value={tx.to}
-                    onChange={(e) => updateField(index, 'to', e.target.value)}
-                  />
-                </div>
-
-                {/* 3. Category & Payer (Split Row) */}
-                <div className="flex gap-2">
-                  <select
-                    className="flex-[2] bg-slate-50 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 outline-none"
-                    value={tx.category}
-                    onChange={(e) => updateField(index, 'category', e.target.value)}
-                  >
-                     <option value="Food">🍔 Food</option>
-                    <option value="Transport">🚗 Transport</option>
-                    <option value="Wifi">📶 Wifi</option>
-                    <option value="Insurance">🛡️ Insurance</option>
-                    <option value="Rent">🏠 Rent</option>
-                    <option value="Others">📦 Others</option>
-                  </select>
-
-                  <div className="flex-1 flex items-center bg-slate-50 rounded-xl px-2">
-                    <User size={12} className="text-slate-400 mr-1" />
-                    <select
-                      className="w-full bg-transparent text-xs font-bold text-slate-600 outline-none"
-                      value={tx.by}
-                      onChange={(e) => updateField(index, 'by', e.target.value)}
+                {/* DUPLICATE WARNING */}
+                {tx.isDuplicate && (
+                  <div className="flex items-center justify-between mb-4 bg-orange-100/50 p-2 rounded-xl">
+                    <div className="flex items-center gap-1.5 text-orange-700 text-[10px] font-black uppercase tracking-widest">
+                      <Copy size={12} /> {tx.isValid === false ? 'Failed Transaction' : 'Potential Duplicate'}
+                    </div>
+                    <button
+                      onClick={() => toggleDuplicate(index)}
+                      className="flex items-center gap-1 text-[10px] font-bold bg-white text-orange-700 px-3 py-1 rounded-lg shadow-sm active:scale-90 transition-transform"
                     >
-                      <option value="Kris">Kris</option>
-                      <option value="Iven">Iven</option>
-                    </select>
+                      <RefreshCcw size={10} /> Mark as New
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center mb-4">
+                   <input
+                      type="date"
+                      className="text-xs font-bold text-slate-500 bg-slate-50 rounded-lg px-2 py-1 outline-none focus:bg-blue-50 transition-colors"
+                      value={tx.date}
+                      onChange={(e) => updateScanField(index, 'date', e.target.value)}
+                    />
+                    <button onClick={() => setScanData(scanData.filter((_, i) => i !== index))}>
+                      <Trash2 size={16} className="text-slate-300 hover:text-red-400" />
+                    </button>
+                </div>
+
+                <div className="mb-6">
+                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest block mb-1">Total Expense</span>
+                  <div className="flex items-center text-3xl font-mono font-bold text-slate-800 tracking-tighter">
+                    <span className="text-lg text-slate-300 mr-1">Rp</span>
+                    <input
+                      type="number"
+                      className="bg-transparent outline-none w-full"
+                      value={tx.total}
+                      onChange={(e) => updateScanField(index, 'total', Number(e.target.value))}
+                    />
                   </div>
                 </div>
 
-                {/* 4. Payment Source (Full Row) */}
-                <div className="flex items-center gap-2 mt-2">
-                   <div className="flex-1 h-px bg-slate-100"></div>
-                   <span className="text-[9px] font-black text-slate-300 uppercase">Paid Via</span>
-                   <div className="flex-1 h-px bg-slate-100"></div>
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="relative flex items-center bg-slate-50 rounded-xl px-3 py-2.5">
+                    <Tag size={14} className="text-slate-400 mr-3" />
+                    <input className="flex-1 bg-transparent text-sm font-bold text-slate-700 outline-none" 
+                      value={tx.expense} onChange={(e) => updateScanField(index, 'expense', e.target.value)} placeholder="Item Description" />
+                  </div>
+                  <div className="relative flex items-center bg-slate-50 rounded-xl px-3 py-2.5">
+                    <Store size={14} className="text-slate-400 mr-3" />
+                    <input className="flex-1 bg-transparent text-sm font-bold text-slate-700 outline-none" 
+                      value={tx.to} onChange={(e) => updateScanField(index, 'to', e.target.value)} placeholder="Merchant" />
+                  </div>
+                  <div className="flex gap-2">
+                    <select className="flex-[2] bg-slate-50 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 outline-none"
+                      value={tx.category} onChange={(e) => updateScanField(index, 'category', e.target.value)}>
+                       <option value="Food">🍔 Food</option><option value="Transport">🚗 Transport</option>
+                       <option value="Wifi">📶 Wifi</option><option value="Insurance">🛡️ Insurance</option>
+                       <option value="Rent">🏠 Rent</option><option value="Others">📦 Others</option>
+                    </select>
+                    <div className="flex-1 flex items-center bg-slate-50 rounded-xl px-2">
+                      <User size={12} className="text-slate-400 mr-1" />
+                      <select className="w-full bg-transparent text-xs font-bold text-slate-600 outline-none"
+                        value={tx.by} onChange={(e) => updateScanField(index, 'by', e.target.value)}>
+                        <option value="Kris">Kris</option><option value="Iven">Iven</option>
+                      </select>
+                    </div>
+                  </div>
+                  <input className="w-full text-center text-xs font-black text-blue-600 uppercase tracking-widest bg-blue-50/50 py-3 rounded-xl outline-none"
+                    value={tx.payment} onChange={(e) => updateScanField(index, 'payment', e.target.value)} placeholder="SOURCE (e.g. JAGO)" />
+                  <input className="w-full text-xs font-medium text-slate-400 bg-transparent py-1 border-b border-dashed border-slate-200 outline-none italic"
+                    value={tx.remarks} onChange={(e) => updateScanField(index, 'remarks', e.target.value)} placeholder="Remarks..." />
                 </div>
+              </div>
+            ))}
 
-                <input 
-                  className="w-full text-center text-xs font-black text-blue-600 uppercase tracking-widest bg-blue-50/50 py-3 rounded-xl outline-none focus:bg-blue-100 transition-colors"
-                  value={tx.payment}
-                  onChange={(e) => updateField(index, 'payment', e.target.value)}
-                  placeholder="SOURCE (e.g. JAGO)"
-                />
-                
-                {/* 5. Remarks (Optional) */}
-                <input 
-                  className="w-full text-xs font-medium text-slate-500 bg-transparent py-2 border-b border-dashed border-slate-200 outline-none focus:border-blue-300 placeholder:italic"
-                  value={tx.remarks}
-                  onChange={(e) => updateField(index, 'remarks', e.target.value)}
-                  placeholder="Add remarks..."
-                />
+            {scanData.length > 0 && (
+              <button 
+                onClick={saveToDatabase} disabled={loading}
+                className="w-full bg-slate-900 py-4 rounded-2xl font-bold text-white shadow-xl flex flex-col items-center justify-center active:scale-95 transition-all"
+              >
+                {loading ? <Loader2 className="animate-spin" /> : (
+                    <>
+                        <div className="flex items-center gap-2">
+                            <CheckCircle2 size={18} />
+                            <span>Record to Ledger</span>
+                        </div>
+                        <span className="text-[10px] opacity-50 uppercase tracking-widest font-black">
+                            Saving {scanData.filter(t => !t.isDuplicate).length} New Items
+                        </span>
+                    </>
+                )}
+              </button>
+            )}
+          </div>
+        )}
 
+        {/* === TAB: HISTORY === */}
+        {activeTab === 'history' && (
+          <div className="space-y-4">
+            <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 sticky top-[72px] z-10">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1">
+                  <span className="text-[9px] font-black text-slate-400 uppercase ml-1">From</span>
+                  <input type="date" className="w-full text-xs font-bold bg-slate-50 rounded-xl p-2 outline-none"
+                    value={dateFilter.start} onChange={(e) => setDateFilter({...dateFilter, start: e.target.value})} />
+                </div>
+                <ArrowRight size={12} className="text-slate-300 mt-4" />
+                <div className="flex-1">
+                  <span className="text-[9px] font-black text-slate-400 uppercase ml-1">To</span>
+                  <input type="date" className="w-full text-xs font-bold bg-slate-50 rounded-xl p-2 outline-none"
+                    value={dateFilter.end} onChange={(e) => setDateFilter({...dateFilter, end: e.target.value})} />
+                </div>
+              </div>
+              <div className="flex justify-between items-end border-t border-slate-50 pt-3 px-1">
+                <span className="text-xs font-bold text-slate-400">Total Spending</span>
+                <span className="text-xl font-black text-slate-800 tracking-tight">
+                  {formatCurrency(calculateTotal(historyData))}
+                </span>
               </div>
             </div>
-          ))}
-        </div>
+
+            {historyLoading ? (
+              <div className="flex justify-center py-12"><Loader2 className="animate-spin text-slate-300" /></div>
+            ) : historyData.length === 0 ? (
+              <div className="text-center py-12 text-slate-300 text-sm font-bold">No records found.</div>
+            ) : (
+              <div className="space-y-3">
+                {historyData.map((tx) => (
+                  <div key={tx.id} className="bg-white p-5 rounded-[2rem] border border-slate-100 flex flex-col gap-2 shadow-sm">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-0.5">{tx.date}</div>
+                        <h3 className="font-bold text-slate-800 text-sm leading-tight">{tx.expense}</h3>
+                        <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium mt-1">
+                          <Store size={10} /> {tx.to} <span className="text-slate-200 mx-1">|</span> {tx.category}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                         <div className="font-mono font-bold text-blue-600 tracking-tighter">{formatCurrency(tx.total)}</div>
+                         <div className="text-[9px] font-black text-slate-400 bg-slate-100 inline-block px-1.5 py-0.5 rounded-md mt-1.5 uppercase">
+                            {tx.by} • {tx.payment}
+                         </div>
+                      </div>
+                    </div>
+                    {tx.remarks && (
+                       <div className="text-[10px] text-slate-500 italic bg-slate-50 p-2.5 rounded-xl mt-1">
+                          "{tx.remarks}"
+                       </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
       </main>
 
-      {/* Sync Button */}
-      {transactions.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 p-6 bg-white/90 backdrop-blur-md border-t border-slate-100 z-20">
+      {/* BOTTOM TAB BAR */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-slate-100 pb-8 pt-2 z-40">
+        <div className="max-w-lg mx-auto grid grid-cols-2">
           <button 
-            onClick={saveToDatabase}
-            disabled={loading}
-            className="w-full bg-slate-900 py-4 rounded-2xl font-bold text-white shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all"
+            onClick={() => setActiveTab('scan')}
+            className={`flex flex-col items-center justify-center py-2 transition-all ${activeTab === 'scan' ? 'text-blue-600' : 'text-slate-300'}`}
           >
-            {loading ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={18} />}
-            <span>Record to Ledger</span>
+            <ScanLine size={24} strokeWidth={activeTab === 'scan' ? 3 : 2} />
+            <span className="text-[10px] font-black uppercase tracking-widest mt-1">Scanner</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveTab('history')}
+            className={`flex flex-col items-center justify-center py-2 transition-all ${activeTab === 'history' ? 'text-blue-600' : 'text-slate-300'}`}
+          >
+            <LayoutList size={24} strokeWidth={activeTab === 'history' ? 3 : 2} />
+            <span className="text-[10px] font-black uppercase tracking-widest mt-1">History</span>
           </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
