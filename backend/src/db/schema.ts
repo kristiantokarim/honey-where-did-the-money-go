@@ -2,28 +2,18 @@ import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 
 export const transactions = sqliteTable('transactions', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  
-  // Date Fields
-  date: text('date').notNull(), // Store as YYYY-MM-DD for sorting
-  
-  // Item Details
+  date: text('date').notNull(),
   category: text('category').notNull(),
-  expense: text('expense').notNull(), // The item name (e.g., "Casman Rent Jun")
-  
-  // Financials
+  expense: text('expense').notNull(),
   price: integer('price').notNull(),
   quantity: integer('quantity').default(1),
   total: integer('total').notNull(),
-  
-  // Payment Details
-  payment: text('payment').notNull(), // Jago, CC Mandiri, etc.
-  by: text('by').notNull(),           // Kris, Iven
-  to: text('to').notNull(),           // Merchant (Link Net, Allianz)
-  
-  // Extras
+  payment: text('payment').notNull(),
+  by: text('by').notNull(),
+  to: text('to').notNull(),
   remarks: text('remarks'),
   paymentCorrection: text('payment_correction'),
-  
-  // System
+  // New column to support the dashboard exclusion feature
+  isExcluded: integer('is_excluded', { mode: 'boolean' }).default(false),
   createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
 });
