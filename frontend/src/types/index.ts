@@ -10,7 +10,6 @@ export interface Transaction {
   by: string;
   to: string;
   remarks?: string;
-  paymentCorrection?: string;
   imageUrl?: string;
   isExcluded?: boolean;
 }

@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider, createRouter } from '@tanstack/react-router';
 import { AppProvider } from './context/AppContext';
 import { TransactionProvider } from './context/TransactionContext';
+import { ToastProvider } from './context/ToastContext';
+import { ToastContainer } from './components/ui/Toast';
 import { routeTree } from './routeTree.gen';
 import './index.css';
 
@@ -18,7 +20,10 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppProvider>
       <TransactionProvider>
-        <RouterProvider router={router} />
+        <ToastProvider>
+          <RouterProvider router={router} />
+          <ToastContainer />
+        </ToastProvider>
       </TransactionProvider>
     </AppProvider>
   </StrictMode>

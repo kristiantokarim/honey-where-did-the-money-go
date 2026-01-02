@@ -21,15 +21,21 @@ export class ParserService {
     this.client = new GoogleGenAI({ apiKey });
   }
 
-  async parseImage(fileBuffer: Buffer, mimeType: string): Promise<{
+  async parseImage(fileBuffer: Buffer, mimeType: string, providedAppType?: string): Promise<{
     appType: string;
     transactions: ParsedTransaction[];
   }> {
     const base64Data = fileBuffer.toString('base64');
 
-    // Step 1: Detect the payment app
-    const appType = await this.detectAppType(base64Data, mimeType);
-    this.logger.log(`Detected app type: ${appType}`);
+    // Step 1: Use provided app type or detect it
+    let appType: string;
+    if (providedAppType && providedAppType !== 'auto') {
+      appType = providedAppType;
+      this.logger.log(`Using provided app type: ${appType}`);
+    } else {
+      appType = await this.detectAppType(base64Data, mimeType);
+      this.logger.log(`Detected app type: ${appType}`);
+    }
 
     // Step 2: Get the appropriate parser using factory
     const parser = this.parserFactory.getParser(appType);

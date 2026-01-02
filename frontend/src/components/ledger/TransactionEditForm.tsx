@@ -23,13 +23,15 @@ export function TransactionEditForm({
       <div className="space-y-3">
         <div className="flex gap-2">
           <input
-            className="flex-1 text-xs font-bold bg-slate-50 p-2 rounded-lg min-h-[44px]"
+            className="flex-1 font-bold bg-slate-50 p-3 rounded-lg min-h-[48px]"
+            style={{ fontSize: '16px' }}
             type="date"
             value={tx.date}
             onChange={(e) => onChange('date', e.target.value)}
           />
           <select
-            className="flex-1 text-xs font-bold bg-slate-50 p-2 rounded-lg min-h-[44px]"
+            className="flex-1 font-bold bg-slate-50 p-3 rounded-lg min-h-[48px]"
+            style={{ fontSize: '16px' }}
             value={tx.category}
             onChange={(e) => onChange('category', e.target.value)}
           >
@@ -45,6 +47,7 @@ export function TransactionEditForm({
           <span className="text-sm text-slate-300 mr-2">Rp</span>
           <input
             className="w-full bg-transparent outline-none"
+            style={{ fontSize: '24px' }}
             type="number"
             inputMode="numeric"
             value={tx.total}
@@ -53,14 +56,16 @@ export function TransactionEditForm({
         </div>
 
         <input
-          className="w-full font-bold bg-slate-50 p-3 rounded-xl outline-none text-sm min-h-[48px]"
+          className="w-full font-bold bg-slate-50 p-3 rounded-xl outline-none min-h-[48px]"
+          style={{ fontSize: '16px' }}
           placeholder="Expense Name"
           value={tx.expense}
           onChange={(e) => onChange('expense', e.target.value)}
         />
 
         <input
-          className="w-full font-bold bg-slate-50 p-3 rounded-xl outline-none text-sm min-h-[48px]"
+          className="w-full font-bold bg-slate-50 p-3 rounded-xl outline-none min-h-[48px]"
+          style={{ fontSize: '16px' }}
           placeholder="To (Merchant)"
           value={tx.to}
           onChange={(e) => onChange('to', e.target.value)}
@@ -68,7 +73,8 @@ export function TransactionEditForm({
 
         <div className="flex gap-2">
           <select
-            className="flex-1 text-xs font-bold bg-slate-50 p-3 rounded-xl min-h-[48px]"
+            className="flex-1 font-bold bg-slate-50 p-3 rounded-xl min-h-[48px]"
+            style={{ fontSize: '16px' }}
             value={tx.payment}
             onChange={(e) => onChange('payment', e.target.value)}
           >
@@ -79,7 +85,8 @@ export function TransactionEditForm({
             ))}
           </select>
           <select
-            className="flex-1 text-xs font-bold bg-slate-50 p-3 rounded-xl min-h-[48px]"
+            className="flex-1 font-bold bg-slate-50 p-3 rounded-xl min-h-[48px]"
+            style={{ fontSize: '16px' }}
             value={tx.by}
             onChange={(e) => onChange('by', e.target.value)}
           >
@@ -92,7 +99,8 @@ export function TransactionEditForm({
         </div>
 
         <textarea
-          className="w-full text-xs bg-slate-50 p-3 rounded-xl outline-none min-h-[80px]"
+          className="w-full bg-slate-50 p-3 rounded-xl outline-none min-h-[80px]"
+          style={{ fontSize: '16px' }}
           placeholder="Remarks"
           value={tx.remarks || ''}
           onChange={(e) => onChange('remarks', e.target.value)}

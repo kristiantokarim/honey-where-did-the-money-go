@@ -18,6 +18,7 @@ import {
   CreateTransactionDto,
   UpdateTransactionDto,
   DateRangeQueryDto,
+  DuplicateCheckItemDto,
 } from '../../common/dtos/transaction.dto';
 
 @Controller('transactions')
@@ -26,7 +27,10 @@ export class TransactionsController {
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
-  async upload(@UploadedFile() file: Express.Multer.File) {
+  async upload(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('appType') appType?: string,
+  ) {
     if (!file) {
       throw new BadRequestException('File is required');
     }
@@ -35,13 +39,12 @@ export class TransactionsController {
       file.buffer,
       file.mimetype,
       file.originalname,
+      appType,
     );
   }
 
   @Post('check-duplicates')
-  async checkDuplicates(
-    @Body() payload: Array<{ date: string; total: number; to: string }>,
-  ) {
+  async checkDuplicates(@Body() payload: DuplicateCheckItemDto[]) {
     return this.transactionsService.checkDuplicates(payload);
   }
 
@@ -52,7 +55,12 @@ export class TransactionsController {
 
   @Get('history')
   async getHistory(@Query() query: DateRangeQueryDto) {
-    return this.transactionsService.getHistory(query.startDate, query.endDate);
+    return this.transactionsService.getHistory(
+      query.startDate,
+      query.endDate,
+      query.category,
+      query.by,
+    );
   }
 
   @Get('dashboard')

@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsOptional, IsBoolean, Min, IsDateString } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsBoolean, Min, IsDateString, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateTransactionDto {
   @IsDateString()
@@ -102,4 +103,28 @@ export class DateRangeQueryDto {
 
   @IsDateString()
   endDate: string;
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsString()
+  @IsOptional()
+  by?: string;
+}
+
+export class DuplicateCheckItemDto {
+  @IsString()
+  date: string;
+
+  @IsNumber()
+  @Type(() => Number)
+  total: number;
+
+  @IsString()
+  to: string;
+
+  @IsString()
+  @IsOptional()
+  expense?: string;
 }

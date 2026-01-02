@@ -1,17 +1,21 @@
-import { Edit3, Ban } from 'lucide-react';
-import { formatIDR } from '../../utils/format';
+import { Edit3, Ban, Trash2, Image } from 'lucide-react';
+import { formatIDR, formatDate } from '../../utils/format';
 import type { Transaction } from '../../types';
 
 interface TransactionCardProps {
   transaction: Transaction;
   onEdit: () => void;
   onToggleExclude: () => void;
+  onDelete: () => void;
+  onViewImage?: () => void;
 }
 
 export function TransactionCard({
   transaction,
   onEdit,
   onToggleExclude,
+  onDelete,
+  onViewImage,
 }: TransactionCardProps) {
   const tx = transaction;
 
@@ -27,7 +31,7 @@ export function TransactionCard({
         <div className="flex justify-between items-start">
           <div className="flex-1">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">
-              {tx.date}
+              {formatDate(tx.date)}
               {tx.isExcluded && <span className="text-red-500">• EXCLUDED</span>}
             </p>
             <h3 className="font-bold text-slate-800 leading-tight">{tx.expense}</h3>
@@ -46,7 +50,15 @@ export function TransactionCard({
             >
               {formatIDR(tx.total)}
             </p>
-            <div className="flex justify-end gap-2 mt-2 items-center">
+            <div className="flex justify-end gap-1 mt-2 items-center">
+              {tx.imageUrl && onViewImage && (
+                <button
+                  onClick={onViewImage}
+                  className="text-slate-300 hover:text-blue-500 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                >
+                  <Image size={14} />
+                </button>
+              )}
               <button
                 onClick={onEdit}
                 className="text-slate-300 hover:text-blue-500 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
@@ -57,9 +69,15 @@ export function TransactionCard({
                 onClick={onToggleExclude}
                 className={`${
                   tx.isExcluded ? 'text-red-500' : 'text-slate-300'
-                } p-1 min-w-[44px] min-h-[44px] flex items-center justify-center`}
+                } hover:text-red-400 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center`}
               >
                 <Ban size={14} />
+              </button>
+              <button
+                onClick={onDelete}
+                className="text-slate-300 hover:text-red-500 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
+              >
+                <Trash2 size={14} />
               </button>
             </div>
           </div>

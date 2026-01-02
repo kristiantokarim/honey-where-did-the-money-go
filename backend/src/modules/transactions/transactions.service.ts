@@ -20,6 +20,7 @@ export class TransactionsService {
     file: Buffer,
     mimeType: string,
     originalFilename: string,
+    appType?: string,
   ): Promise<{
     appType: string;
     transactions: ParsedTransaction[];
@@ -29,8 +30,8 @@ export class TransactionsService {
     const imageFilename = await this.storageService.upload(file, originalFilename, mimeType);
     const imageUrl = await this.storageService.getUrl(imageFilename);
 
-    // Parse the image
-    const result = await this.parserService.parseImage(file, mimeType);
+    // Parse the image (pass appType to skip AI detection if provided)
+    const result = await this.parserService.parseImage(file, mimeType, appType);
 
     return {
       ...result,
@@ -39,8 +40,8 @@ export class TransactionsService {
   }
 
   async checkDuplicates(
-    items: Array<{ date: string; total: number; to: string }>,
-  ): Promise<Array<{ exists: boolean }>> {
+    items: Array<{ date: string; total: number; to: string; expense?: string }>,
+  ): Promise<Array<{ exists: boolean; matchedId?: number }>> {
     return this.repository.checkDuplicates(items);
   }
 
@@ -59,8 +60,13 @@ export class TransactionsService {
     return { success: true, count: result.length };
   }
 
-  async getHistory(startDate: string, endDate: string): Promise<Transaction[]> {
-    return this.repository.findByDateRange(startDate, endDate);
+  async getHistory(
+    startDate: string,
+    endDate: string,
+    category?: string,
+    by?: string,
+  ): Promise<Transaction[]> {
+    return this.repository.findByDateRange(startDate, endDate, category, by);
   }
 
   async getDashboard(

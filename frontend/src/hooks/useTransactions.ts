@@ -39,9 +39,24 @@ export function useTransactions() {
     [historyData, setHistoryData]
   );
 
+  const deleteTransaction = useCallback(
+    async (id: number) => {
+      try {
+        await transactionService.delete(id);
+        await refreshHistory();
+        return true;
+      } catch (error) {
+        console.error('Failed to delete transaction:', error);
+        return false;
+      }
+    },
+    [refreshHistory]
+  );
+
   return {
     updateTransaction,
     toggleExclude,
     updateLocalTransaction,
+    deleteTransaction,
   };
 }

@@ -2,17 +2,20 @@ import { api } from './api';
 import type { Transaction, ParsedTransaction, DashboardItem, ParseResult } from '../types';
 
 export const transactionService = {
-  upload: async (file: File): Promise<ParseResult> => {
+  upload: async (file: File, appType?: string): Promise<ParseResult> => {
     const formData = new FormData();
     formData.append('file', file);
+    if (appType) {
+      formData.append('appType', appType);
+    }
     const response = await api.post<ParseResult>('/transactions/upload', formData);
     return response.data;
   },
 
   checkDuplicates: async (
-    items: Array<{ date: string; total: number; to: string }>
-  ): Promise<Array<{ exists: boolean }>> => {
-    const response = await api.post<Array<{ exists: boolean }>>(
+    items: Array<{ date: string; total: number; to: string; expense?: string }>
+  ): Promise<Array<{ exists: boolean; matchedId?: number }>> => {
+    const response = await api.post<Array<{ exists: boolean; matchedId?: number }>>(
       '/transactions/check-duplicates',
       items
     );
@@ -31,10 +34,16 @@ export const transactionService = {
 
   getHistory: async (
     startDate: string,
-    endDate: string
+    endDate: string,
+    category?: string,
+    by?: string
   ): Promise<Transaction[]> => {
+    const params: Record<string, string> = { startDate, endDate };
+    if (category) params.category = category;
+    if (by) params.by = by;
+
     const response = await api.get<Transaction[]>('/transactions/history', {
-      params: { startDate, endDate },
+      params,
     });
     return response.data;
   },

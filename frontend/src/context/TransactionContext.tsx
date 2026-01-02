@@ -8,6 +8,11 @@ interface DateFilter {
   end: string;
 }
 
+interface LedgerFilters {
+  category: string;
+  by: string;
+}
+
 interface TransactionContextValue {
   // Scan state
   scanData: ParsedTransaction[];
@@ -29,6 +34,10 @@ interface TransactionContextValue {
   // Date filter (shared between ledger and dashboard)
   dateFilter: DateFilter;
   setDateFilter: (filter: DateFilter) => void;
+
+  // Ledger filters (category and by)
+  ledgerFilters: LedgerFilters;
+  setLedgerFilters: (filters: LedgerFilters) => void;
 }
 
 const TransactionContext = createContext<TransactionContextValue | null>(null);
@@ -49,17 +58,28 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
   // Date filter
   const [dateFilter, setDateFilter] = useState<DateFilter>(getMonthRange());
 
+  // Ledger filters
+  const [ledgerFilters, setLedgerFilters] = useState<LedgerFilters>({
+    category: '',
+    by: '',
+  });
+
   const refreshHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const data = await transactionService.getHistory(dateFilter.start, dateFilter.end);
+      const data = await transactionService.getHistory(
+        dateFilter.start,
+        dateFilter.end,
+        ledgerFilters.category || undefined,
+        ledgerFilters.by || undefined,
+      );
       setHistoryData(data);
     } catch (error) {
       console.error('Failed to fetch history:', error);
     } finally {
       setHistoryLoading(false);
     }
-  }, [dateFilter.start, dateFilter.end]);
+  }, [dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by]);
 
   const refreshDashboard = useCallback(async () => {
     setDashLoading(true);
@@ -89,6 +109,8 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
         refreshDashboard,
         dateFilter,
         setDateFilter,
+        ledgerFilters,
+        setLedgerFilters,
       }}
     >
       {children}
