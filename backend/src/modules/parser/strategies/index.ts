@@ -3,4 +3,8 @@ export * from './gojek.parser';
 export * from './ovo.parser';
 export * from './bca.parser';
 export * from './grab.parser';
+export * from './dana.parser';
+export * from './jenius.parser';
+export * from './jago.parser';
+export * from './danamon.parser';
 export * from './default.parser';

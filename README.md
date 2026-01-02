@@ -407,9 +407,6 @@ docker compose down -v
 - [ ] Export to CSV/Excel/Google Sheets
 
 ### Quality of Life
-- [ ] Recurring transactions (subscriptions, rent, etc.)
-- [ ] Split expense tracking between household members
-- [ ] Receipt image gallery with search
 - [ ] Undo/restore deleted transactions
 - [ ] Dark mode
 

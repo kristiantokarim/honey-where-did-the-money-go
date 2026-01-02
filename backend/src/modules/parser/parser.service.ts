@@ -51,13 +51,16 @@ export class ParserService {
   }
 
   private async detectAppType(imageData: string, mimeType: string): Promise<string> {
+    const supportedApps = this.parserFactory.getSupportedApps();
+    const appList = [...supportedApps, 'Unknown'].join(', ');
+
     const response = await this.client.models.generateContent({
       model: this.model,
       contents: [
         {
           role: 'user',
           parts: [
-            { text: 'Analyze this screenshot. Reply with ONLY one word: Gojek, Grab, OVO, BCA, or Unknown.' },
+            { text: `Analyze this screenshot. Reply with ONLY one word: ${appList}.` },
             {
               inlineData: {
                 data: imageData,

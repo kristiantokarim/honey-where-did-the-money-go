@@ -5,6 +5,10 @@ import {
   OVOParser,
   BCAParser,
   GrabParser,
+  DanaParser,
+  JeniusParser,
+  JagoParser,
+  DanamonParser,
   DefaultParser,
 } from './strategies';
 
@@ -19,6 +23,10 @@ export class ParserFactory {
       new OVOParser(),
       new BCAParser(),
       new GrabParser(),
+      new DanaParser(),
+      new JeniusParser(),
+      new JagoParser(),
+      new DanamonParser(),
       new DefaultParser(), // Always last as fallback
     ];
   }
