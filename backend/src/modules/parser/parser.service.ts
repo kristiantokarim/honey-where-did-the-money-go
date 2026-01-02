@@ -1,14 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { ParserFactory } from './parser.factory';
 import { ParsedTransaction } from '../../common/dtos/parse-result.dto';
 
 @Injectable()
 export class ParserService {
   private readonly logger = new Logger(ParserService.name);
-  private readonly genAI: GoogleGenerativeAI;
-  private readonly model: GenerativeModel;
+  private readonly client: GoogleGenAI;
+  private readonly model: string = 'gemini-2.5-flash';
 
   constructor(
     private readonly configService: ConfigService,
@@ -18,8 +18,7 @@ export class ParserService {
     if (!apiKey) {
       throw new Error('GOOGLE_API_KEY is not configured');
     }
-    this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    this.client = new GoogleGenAI({ apiKey });
   }
 
   async parseImage(fileBuffer: Buffer, mimeType: string): Promise<{
@@ -36,7 +35,7 @@ export class ParserService {
     const parser = this.parserFactory.getParser(appType);
 
     // Step 3: Parse the image using the selected strategy
-    const transactions = await parser.parse(this.model, base64Data, mimeType);
+    const transactions = await parser.parse(this.client, this.model, base64Data, mimeType);
     this.logger.log(`Parsed ${transactions.length} transactions`);
 
     return {
@@ -46,12 +45,25 @@ export class ParserService {
   }
 
   private async detectAppType(imageData: string, mimeType: string): Promise<string> {
-    const result = await this.model.generateContent([
-      'Analyze this screenshot. Reply with ONLY one word: Gojek, Grab, OVO, BCA, or Unknown.',
-      { inlineData: { data: imageData, mimeType } },
-    ]);
+    const response = await this.client.models.generateContent({
+      model: this.model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: 'Analyze this screenshot. Reply with ONLY one word: Gojek, Grab, OVO, BCA, or Unknown.' },
+            {
+              inlineData: {
+                data: imageData,
+                mimeType,
+              },
+            },
+          ],
+        },
+      ],
+    });
 
-    return result.response.text().trim();
+    return (response.text || 'Unknown').trim();
   }
 
   getSupportedApps(): string[] {

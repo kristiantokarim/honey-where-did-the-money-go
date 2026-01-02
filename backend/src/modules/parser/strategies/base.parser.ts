@@ -1,4 +1,4 @@
-import { GenerativeModel } from '@google/generative-ai';
+import type { GoogleGenAI } from '@google/genai';
 import { Logger } from '@nestjs/common';
 import { IPaymentParser } from '../parser.interface';
 import { ParsedTransaction } from '../../../common/dtos/parse-result.dto';
@@ -10,15 +10,28 @@ export abstract class BaseParser implements IPaymentParser {
   abstract canParse(detectedApp: string): boolean;
   abstract getPrompt(): string;
 
-  async parse(model: GenerativeModel, imageData: string, mimeType: string): Promise<ParsedTransaction[]> {
+  async parse(client: GoogleGenAI, model: string, imageData: string, mimeType: string): Promise<ParsedTransaction[]> {
     const prompt = this.buildFullPrompt();
 
-    const result = await model.generateContent([
-      prompt,
-      { inlineData: { data: imageData, mimeType } },
-    ]);
+    const response = await client.models.generateContent({
+      model,
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                data: imageData,
+                mimeType,
+              },
+            },
+          ],
+        },
+      ],
+    });
 
-    const text = result.response.text();
+    const text = response.text || '';
     return this.extractJson(text);
   }
 
