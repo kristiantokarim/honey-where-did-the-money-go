@@ -366,20 +366,11 @@ docker compose down -v
 
 ## Future Plans
 
-### Short Term
-- [ ] Add recurring transactions support
-- [ ] Export transactions to CSV/Excel
-- [ ] Monthly spending comparison charts
-- [ ] Push notifications for budget alerts
-
-### Medium Term
 - [ ] Multi-household/tenant support with authentication
 - [ ] Configurable categories, users, and payment methods per household
-- [ ] Budget setting and tracking per category
+- [ ] Ability to see list of expenses from dashboard page
 - [ ] Receipt OCR improvements for more payment apps
+- [ ] Ability to accept Bank Statement PDF
+- [ ] Ability to accept multiple images / files uploads
+- [ ] Ability to accept single video that records the transactions
 
-### Long Term
-- [ ] Mobile app (React Native or PWA)
-- [ ] Bank statement import (CSV/PDF parsing)
-- [ ] AI-powered spending insights and recommendations
-- [ ] Shared expense splitting and settlement tracking
