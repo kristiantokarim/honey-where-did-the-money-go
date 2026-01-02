@@ -5,6 +5,7 @@ import { DatabaseModule } from './database/database.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { ParserModule } from './modules/parser/parser.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
+import { ConfigAppModule } from './modules/config/config.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TransactionsModule } from './modules/transactions/transactions.module';
     StorageModule,
     ParserModule,
     TransactionsModule,
+    ConfigAppModule,
   ],
 })
 export class AppModule {}

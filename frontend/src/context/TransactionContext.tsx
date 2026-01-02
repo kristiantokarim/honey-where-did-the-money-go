@@ -1,0 +1,105 @@
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { transactionService } from '../services/transactions';
+import { getMonthRange } from '../utils/format';
+import type { Transaction, ParsedTransaction, DashboardItem } from '../types';
+
+interface DateFilter {
+  start: string;
+  end: string;
+}
+
+interface TransactionContextValue {
+  // Scan state
+  scanData: ParsedTransaction[];
+  setScanData: (data: ParsedTransaction[]) => void;
+  previewImage: string | null;
+  setPreviewImage: (url: string | null) => void;
+
+  // History state
+  historyData: Transaction[];
+  setHistoryData: (data: Transaction[]) => void;
+  historyLoading: boolean;
+  refreshHistory: () => Promise<void>;
+
+  // Dashboard state
+  dashData: DashboardItem[];
+  dashLoading: boolean;
+  refreshDashboard: () => Promise<void>;
+
+  // Date filter (shared between ledger and dashboard)
+  dateFilter: DateFilter;
+  setDateFilter: (filter: DateFilter) => void;
+}
+
+const TransactionContext = createContext<TransactionContextValue | null>(null);
+
+export function TransactionProvider({ children }: { children: ReactNode }) {
+  // Scan state
+  const [scanData, setScanData] = useState<ParsedTransaction[]>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
+  // History state
+  const [historyData, setHistoryData] = useState<Transaction[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Dashboard state
+  const [dashData, setDashData] = useState<DashboardItem[]>([]);
+  const [dashLoading, setDashLoading] = useState(false);
+
+  // Date filter
+  const [dateFilter, setDateFilter] = useState<DateFilter>(getMonthRange());
+
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const data = await transactionService.getHistory(dateFilter.start, dateFilter.end);
+      setHistoryData(data);
+    } catch (error) {
+      console.error('Failed to fetch history:', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [dateFilter.start, dateFilter.end]);
+
+  const refreshDashboard = useCallback(async () => {
+    setDashLoading(true);
+    try {
+      const data = await transactionService.getDashboard(dateFilter.start, dateFilter.end);
+      setDashData(data);
+    } catch (error) {
+      console.error('Failed to fetch dashboard:', error);
+    } finally {
+      setDashLoading(false);
+    }
+  }, [dateFilter.start, dateFilter.end]);
+
+  return (
+    <TransactionContext.Provider
+      value={{
+        scanData,
+        setScanData,
+        previewImage,
+        setPreviewImage,
+        historyData,
+        setHistoryData,
+        historyLoading,
+        refreshHistory,
+        dashData,
+        dashLoading,
+        refreshDashboard,
+        dateFilter,
+        setDateFilter,
+      }}
+    >
+      {children}
+    </TransactionContext.Provider>
+  );
+}
+
+export function useTransactionContext() {
+  const context = useContext(TransactionContext);
+  if (!context) {
+    throw new Error('useTransactionContext must be used within a TransactionProvider');
+  }
+  return context;
+}
