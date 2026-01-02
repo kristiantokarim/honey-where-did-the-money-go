@@ -14,7 +14,11 @@ But you know what ALL of them have? **Transaction history screens.** Beautiful, 
 
 So instead of continuing our monthly ritual of manual data entry and existential dread, we built this tool. Modern OCR and LLMs are good enough now that a screenshot of your transaction history can be parsed into structured data in seconds. No more squinting. No more typing. No more "wait, was that Rp 45.000 or Rp 450.000?"
 
-**TL;DR**: We were too lazy to keep doing manual expense tracking, so we spent way more time building an app to automate it. Worth it.
+"But why don't you just use ONE app instead of nine?" Oh, sweet summer child. And miss all the discounts? Absolutely not. Each app has its own partnerships and promotions that make it better than the others in specific situations. Gojek is cheaper for rides on Monday, Grab has better food promos on weekends, Allo Bank randomly has 50% off on Tiket.com, BCA credit card gives cashback at certain merchants, OVO has points multipliers... you get the idea. Consolidating into a single payment app means leaving money on the table, and we refuse to do that out of mere *laziness*.
+
+So instead of simplifying our financial life like normal people, we built ANOTHER APP to patch the chaos. "Why not use APIs?" you ask. Adorable. Half these apps don't expose APIs, and the ones that do (looking at you, Open Banking) charge fees that would defeat the purpose of all those discounts we're hoarding.
+
+**TL;DR**: We were too lazy to keep doing manual expense tracking, so we spent way more time building an app to automate it. Peak efficiency.
 
 ---
 
