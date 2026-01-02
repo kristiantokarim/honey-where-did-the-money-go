@@ -1,11 +1,11 @@
-# EXP_PRO - Expense Tracking Application
+# EXP_TRACK - Expense Tracking Application
 
-A full-stack expense tracking application with AI-powered receipt scanning. Built for tracking shared expenses with support for Indonesian e-money payment apps (Gojek, OVO, BCA, Grab).
+A full-stack expense tracking application with AI-powered receipt scanning. Built for tracking shared household expenses with support for Indonesian e-money payment apps (Gojek, OVO, BCA, Grab).
 
 ## Tech Stack
 
 - **Backend**: NestJS, TypeScript, PostgreSQL, Drizzle ORM, MinIO, Google Gemini AI
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Axios
+- **Frontend**: React 19, TypeScript, TanStack Router, Vite, Tailwind CSS, Axios
 
 ---
 
@@ -93,18 +93,24 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 ### Receipt Scanning (Scan Tab)
 - Upload receipt screenshots from Indonesian e-money apps
 - AI-powered parsing using Google Gemini API
-- Auto-detects payment app type: **Gojek, OVO, BCA, Grab**
+- Auto-detects payment app type: **Gojek, OVO, BCA, Grab** (or manual selection)
 - Extracts transaction details: date, amount, merchant, category
-- Receipt images stored in MinIO for history
-- Duplicate detection before saving
+- Receipt images stored in MinIO and linked to transactions
+- Smart duplicate detection with fuzzy matching on merchant/expense names
+- Override false-positive duplicates with "Keep anyway" option
+- Auto-skips failed/cancelled transactions
 - Manual field editing before confirmation
+- Confirmation dialog before removing scanned items
 
 ### Ledger / Transaction History (Ledger Tab)
 - View all recorded transactions
 - Date range filtering (defaults to current month)
+- Filter by category and user
 - Full editing capabilities:
   - Edit date, category, amount, merchant, payment source, user, remarks
   - Exclude transactions from dashboard calculations
+- View original receipt image (lightbox preview)
+- Delete transactions with confirmation dialog
 - Formatted currency display (IDR)
 - Effective total calculation (excluding marked transactions)
 
@@ -116,9 +122,10 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 - Automatically excludes marked transactions from calculations
 
 ### Multi-User Support
-- Supports multiple users (Kris & Iven)
-- User selector in header
+- Supports multiple users (configurable via backend)
+- User selector on scan page
 - Default user assignment for scanned items
+- Filter transactions by user in ledger
 
 ### Categories
 - Food
@@ -147,6 +154,52 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 ---
 
 ## Architecture
+
+### Frontend
+
+```
+frontend/src/
+├── main.tsx                    # Entry point with providers
+├── index.css                   # Tailwind imports
+├── routeTree.gen.ts            # Auto-generated route tree
+│
+├── routes/                     # TanStack Router pages
+│   ├── __root.tsx              # Root layout (header, nav)
+│   ├── index.tsx               # Redirect to /scan
+│   ├── scan.tsx                # Upload & parse receipts
+│   ├── ledger.tsx              # Transaction history
+│   └── dashboard.tsx           # Spending analytics
+│
+├── components/                 # UI components by feature
+│   ├── common/                 # Shared (ConfirmDialog)
+│   ├── layout/                 # Header, TabNav
+│   ├── scan/                   # FileUpload, TransactionItem, ImagePreview
+│   ├── ledger/                 # DateFilter, TransactionCard, EditForm
+│   ├── dashboard/              # TotalCard, CategoryChart
+│   └── ui/                     # Toast notifications
+│
+├── context/                    # React Context providers
+│   ├── AppContext.tsx          # Config, user state
+│   ├── TransactionContext.tsx  # Transaction data
+│   └── ToastContext.tsx        # Toast notifications
+│
+├── hooks/                      # Custom hooks
+│   ├── useTransactions.ts      # CRUD operations
+│   └── useImagePreview.ts      # Image zoom state
+│
+├── services/                   # API layer
+│   ├── api.ts                  # Axios instance
+│   ├── config.ts               # Config endpoint
+│   └── transactions.ts         # Transaction endpoints
+│
+├── types/                      # TypeScript interfaces
+│   └── index.ts
+│
+└── utils/                      # Utility functions
+    └── format.ts               # formatIDR, formatDate
+```
+
+### Backend
 
 The backend follows clean architecture principles:
 
@@ -272,3 +325,61 @@ docker compose down
 # To remove volumes (reset data)
 docker compose down -v
 ```
+
+---
+
+## Coding Standards
+
+### General Principles
+- **TypeScript**: Strict mode enabled, no `any` types unless absolutely necessary
+- **Functional approach**: Prefer pure functions, immutability, and composition
+- **Single responsibility**: Each file/function should do one thing well
+- **No over-engineering**: Only add complexity when needed, avoid premature abstractions
+
+### Backend (NestJS)
+- **Clean Architecture**: Controller → Service → Repository pattern
+- **DTOs**: All request/response data validated with `class-validator`
+- **Strategy Pattern**: Used for payment app parsers (easy to extend)
+- **Database**: Drizzle ORM with explicit schema, migrations tracked in `drizzle/`
+- **Naming**: PascalCase for classes, camelCase for functions/variables
+
+### Frontend (React)
+- **Component Structure**:
+  - `components/` - Reusable UI components grouped by feature
+  - `context/` - React Context for global state
+  - `hooks/` - Custom hooks for reusable logic
+  - `services/` - API calls (axios)
+  - `routes/` - TanStack Router page components
+  - `types/` - TypeScript interfaces
+  - `utils/` - Pure utility functions
+- **State Management**: React Context + hooks (no Redux)
+- **Styling**: Tailwind CSS, mobile-first design
+- **Naming**: PascalCase for components, camelCase for hooks/functions
+
+### Mobile-First UI
+- Minimum touch targets: 44x44px
+- Large inputs with `min-h-[48px]`
+- Use `style={{ fontSize: '16px' }}` on selects to prevent iOS zoom
+- Full-width buttons for primary actions
+
+---
+
+## Future Plans
+
+### Short Term
+- [ ] Add recurring transactions support
+- [ ] Export transactions to CSV/Excel
+- [ ] Monthly spending comparison charts
+- [ ] Push notifications for budget alerts
+
+### Medium Term
+- [ ] Multi-household/tenant support with authentication
+- [ ] Configurable categories, users, and payment methods per household
+- [ ] Budget setting and tracking per category
+- [ ] Receipt OCR improvements for more payment apps
+
+### Long Term
+- [ ] Mobile app (React Native or PWA)
+- [ ] Bank statement import (CSV/PDF parsing)
+- [ ] AI-powered spending insights and recommendations
+- [ ] Shared expense splitting and settlement tracking
