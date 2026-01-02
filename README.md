@@ -1,6 +1,22 @@
 # EXP_TRACK - Expense Tracking Application
 
-A full-stack expense tracking application with AI-powered receipt scanning. Built for tracking shared household expenses with support for Indonesian e-money payment apps (Gojek, OVO, BCA, Grab).
+A full-stack expense tracking application with AI-powered receipt scanning. Built for tracking shared household expenses with support for Indonesian e-money payment apps.
+
+---
+
+## Why This Exists (A.K.A. The Pain)
+
+Indonesia is a *wonderfully* cashless country. So cashless, in fact, that we've somehow ended up with approximately 47 different finance apps competing for the privilege of holding our money. In our household alone, we juggle: **Gojek, Grab, OVO, Dana, Jenius, Jago, Danamon, BCA, and Allo Bank**. Yes, nine apps. No, we don't know how it got this bad either.
+
+This makes expense tracking an absolute *joy*. Every month, we'd spend hours playing detective across nine different apps, squinting at transaction histories, and manually typing everything into Excel like it's 2005. We tried automating it with email notifications, but surprise—not every app sends transaction emails. Some do. Some don't. Some send them only on Tuesdays when Mercury is in retrograde.
+
+But you know what ALL of them have? **Transaction history screens.** Beautiful, screenshot-able transaction histories.
+
+So instead of continuing our monthly ritual of manual data entry and existential dread, we built this tool. Modern OCR and LLMs are good enough now that a screenshot of your transaction history can be parsed into structured data in seconds. No more squinting. No more typing. No more "wait, was that Rp 45.000 or Rp 450.000?"
+
+**TL;DR**: We were too lazy to keep doing manual expense tracking, so we spent way more time building an app to automate it. Worth it.
+
+---
 
 ## Tech Stack
 
@@ -366,11 +382,30 @@ docker compose down -v
 
 ## Future Plans
 
+### Core Features
 - [ ] Multi-household/tenant support with authentication
 - [ ] Configurable categories, users, and payment methods per household
-- [ ] Ability to see list of expenses from dashboard page
-- [ ] Receipt OCR improvements for more payment apps
-- [ ] Ability to accept Bank Statement PDF
-- [ ] Ability to accept multiple images / files uploads
-- [ ] Ability to accept single video that records the transactions
+- [ ] Ability to see list of expenses from dashboard page (click category to drill down)
+- [ ] Receipt OCR improvements for more payment apps (Dana, Jenius, Jago, etc.)
+
+### Input Methods
+- [ ] Ability to accept Bank Statement PDF parsing
+- [ ] Ability to accept multiple images/files in single upload
+- [ ] Ability to accept video recording of scrolling through transaction history
+- [ ] Clipboard paste support for screenshots
+- [ ] WhatsApp bot integration for quick uploads
+
+### Analytics & Insights
+- [ ] Monthly/yearly spending comparison charts
+- [ ] Budget setting and alerts per category
+- [ ] Spending trends and patterns visualization
+- [ ] AI-powered spending insights ("You spent 40% more on Food this month")
+- [ ] Export to CSV/Excel/Google Sheets
+
+### Quality of Life
+- [ ] Recurring transactions (subscriptions, rent, etc.)
+- [ ] Split expense tracking between household members
+- [ ] Receipt image gallery with search
+- [ ] Undo/restore deleted transactions
+- [ ] Dark mode
 
