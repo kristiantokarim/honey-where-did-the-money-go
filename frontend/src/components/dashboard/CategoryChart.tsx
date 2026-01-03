@@ -3,9 +3,10 @@ import type { DashboardItem } from '../../types';
 
 interface CategoryChartProps {
   data: DashboardItem[];
+  onCategoryClick?: (categoryName: string) => void;
 }
 
-export function CategoryChart({ data }: CategoryChartProps) {
+export function CategoryChart({ data, onCategoryClick }: CategoryChartProps) {
   const total = data.reduce((sum, cat) => sum + cat.total, 0);
 
   if (data.length === 0) {
@@ -28,7 +29,11 @@ export function CategoryChart({ data }: CategoryChartProps) {
         {data.map((cat) => {
           const percentage = total > 0 ? (cat.total / total) * 100 : 0;
           return (
-            <div key={cat.name}>
+            <div
+              key={cat.name}
+              onClick={() => onCategoryClick?.(cat.name)}
+              className={onCategoryClick ? 'cursor-pointer hover:bg-slate-50 -mx-2 px-2 py-2 rounded-xl transition-colors active:scale-[0.99]' : ''}
+            >
               <div className="flex justify-between text-[11px] font-black mb-2 uppercase tracking-wide">
                 <span className="text-slate-600">{cat.name}</span>
                 <span className="text-slate-400">{percentage.toFixed(1)}%</span>

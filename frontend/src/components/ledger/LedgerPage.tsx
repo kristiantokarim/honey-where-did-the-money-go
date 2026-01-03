@@ -4,7 +4,7 @@ import { useTransactionContext } from '../../context/TransactionContext';
 import { useToast } from '../../context/ToastContext';
 import { useTransactions } from '../../hooks/useTransactions';
 import { formatIDR } from '../../utils/format';
-import { DateFilter } from './DateFilter';
+import { LedgerFilters } from './LedgerFilters';
 import { TransactionCard } from './TransactionCard';
 import { TransactionEditForm } from './TransactionEditForm';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -81,7 +81,7 @@ export function LedgerPage() {
 
   return (
     <div className="space-y-3">
-      <DateFilter />
+      <LedgerFilters />
 
       <div className="text-right px-2 pb-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
         Effective Total:{' '}

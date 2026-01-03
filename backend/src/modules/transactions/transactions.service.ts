@@ -65,8 +65,9 @@ export class TransactionsService {
     endDate: string,
     category?: string,
     by?: string,
+    sortBy?: string,
   ): Promise<Transaction[]> {
-    return this.repository.findByDateRange(startDate, endDate, category, by);
+    return this.repository.findByDateRange(startDate, endDate, category, by, sortBy);
   }
 
   async getDashboard(

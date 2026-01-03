@@ -140,6 +140,7 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 - Visual progress bars
 - Total spending overview
 - Automatically excludes marked transactions from calculations
+- Click any category to drill down and see individual transactions (sorted by amount)
 
 ### Multi-User Support
 - Supports multiple users (configurable via backend)
@@ -389,8 +390,6 @@ docker compose down -v
 ### Core Features
 - [ ] Multi-household/tenant support with authentication
 - [ ] Configurable categories, users, and payment methods per household
-- [ ] Ability to see list of expenses from dashboard page (click category to drill down)
-- [ ] Receipt OCR improvements for more payment apps (Dana, Jenius, Jago, etc.)
 
 ### Input Methods
 - [ ] Ability to accept Bank Statement PDF parsing

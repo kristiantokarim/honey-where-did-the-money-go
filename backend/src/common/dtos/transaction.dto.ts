@@ -111,6 +111,10 @@ export class DateRangeQueryDto {
   @IsString()
   @IsOptional()
   by?: string;
+
+  @IsString()
+  @IsOptional()
+  sortBy?: string;
 }
 
 export class DuplicateCheckItemDto {

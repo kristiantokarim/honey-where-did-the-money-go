@@ -36,6 +36,7 @@ export class TransactionsRepository {
     endDate: string,
     category?: string,
     by?: string,
+    sortBy?: string,
   ): Promise<Transaction[]> {
     const conditions = [
       gte(transactions.date, startDate),
@@ -49,11 +50,14 @@ export class TransactionsRepository {
       conditions.push(eq(transactions.by, by));
     }
 
+    const orderByColumn =
+      sortBy === 'total' ? desc(transactions.total) : desc(transactions.date);
+
     return await this.db
       .select()
       .from(transactions)
       .where(and(...conditions))
-      .orderBy(desc(transactions.date));
+      .orderBy(orderByColumn);
   }
 
   async update(id: number, data: Partial<NewTransaction>): Promise<Transaction | undefined> {

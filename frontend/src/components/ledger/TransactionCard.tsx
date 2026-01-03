@@ -4,10 +4,11 @@ import type { Transaction } from '../../types';
 
 interface TransactionCardProps {
   transaction: Transaction;
-  onEdit: () => void;
-  onToggleExclude: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onToggleExclude?: () => void;
+  onDelete?: () => void;
   onViewImage?: () => void;
+  readonly?: boolean;
 }
 
 export function TransactionCard({
@@ -16,6 +17,7 @@ export function TransactionCard({
   onToggleExclude,
   onDelete,
   onViewImage,
+  readonly,
 }: TransactionCardProps) {
   const tx = transaction;
 
@@ -50,36 +52,38 @@ export function TransactionCard({
             >
               {formatIDR(tx.total)}
             </p>
-            <div className="flex justify-end gap-1 mt-2 items-center">
-              {tx.imageUrl && onViewImage && (
+            {!readonly && (
+              <div className="flex justify-end gap-1 mt-2 items-center">
+                {tx.imageUrl && onViewImage && (
+                  <button
+                    onClick={onViewImage}
+                    className="text-slate-300 hover:text-blue-500 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                  >
+                    <Image size={14} />
+                  </button>
+                )}
                 <button
-                  onClick={onViewImage}
+                  onClick={onEdit}
                   className="text-slate-300 hover:text-blue-500 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
                 >
-                  <Image size={14} />
+                  <Edit3 size={14} />
                 </button>
-              )}
-              <button
-                onClick={onEdit}
-                className="text-slate-300 hover:text-blue-500 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
-              >
-                <Edit3 size={14} />
-              </button>
-              <button
-                onClick={onToggleExclude}
-                className={`${
-                  tx.isExcluded ? 'text-red-500' : 'text-slate-300'
-                } hover:text-red-400 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center`}
-              >
-                <Ban size={14} />
-              </button>
-              <button
-                onClick={onDelete}
-                className="text-slate-300 hover:text-red-500 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
+                <button
+                  onClick={onToggleExclude}
+                  className={`${
+                    tx.isExcluded ? 'text-red-500' : 'text-slate-300'
+                  } hover:text-red-400 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center`}
+                >
+                  <Ban size={14} />
+                </button>
+                <button
+                  onClick={onDelete}
+                  className="text-slate-300 hover:text-red-500 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

@@ -36,11 +36,13 @@ export const transactionService = {
     startDate: string,
     endDate: string,
     category?: string,
-    by?: string
+    by?: string,
+    sortBy?: string
   ): Promise<Transaction[]> => {
     const params: Record<string, string> = { startDate, endDate };
     if (category) params.category = category;
     if (by) params.by = by;
+    if (sortBy) params.sortBy = sortBy;
 
     const response = await api.get<Transaction[]>('/transactions/history', {
       params,

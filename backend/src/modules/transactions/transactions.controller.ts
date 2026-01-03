@@ -60,6 +60,7 @@ export class TransactionsController {
       query.endDate,
       query.category,
       query.by,
+      query.sortBy,
     );
   }
 
