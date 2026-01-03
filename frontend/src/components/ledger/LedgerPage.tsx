@@ -121,7 +121,7 @@ export function LedgerPage() {
       {/* Image Lightbox */}
       {viewingImageUrl && (
         <div
-          className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-4"
+          className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-4 animate-fade-in"
           onClick={() => setViewingImageUrl(null)}
         >
           <button
@@ -132,8 +132,8 @@ export function LedgerPage() {
           </button>
           <img
             src={viewingImageUrl}
-            alt="Transaction Receipt"
-            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            alt="Transaction Screenshot"
+            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl animate-zoom-in"
             onClick={(e) => e.stopPropagation()}
           />
         </div>

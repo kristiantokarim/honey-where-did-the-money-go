@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 
 export function useImagePreview() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [showImage, setShowImage] = useState(true);
+  const [showImage, setShowImage] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
 
   const setPreviewFromFile = useCallback((file: File) => {
@@ -12,7 +12,7 @@ export function useImagePreview() {
     }
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
-    setShowImage(true);
+    // Keep collapsed - user can expand if they want to compare
   }, [previewUrl]);
 
   const setPreviewFromUrl = useCallback((url: string) => {
@@ -21,7 +21,7 @@ export function useImagePreview() {
       URL.revokeObjectURL(previewUrl);
     }
     setPreviewUrl(url);
-    setShowImage(true);
+    // Keep collapsed - user can expand if they want to compare
   }, [previewUrl]);
 
   const clearPreview = useCallback(() => {
@@ -29,7 +29,7 @@ export function useImagePreview() {
       URL.revokeObjectURL(previewUrl);
     }
     setPreviewUrl(null);
-    setShowImage(true);
+    setShowImage(false);
     setIsZoomed(false);
   }, [previewUrl]);
 

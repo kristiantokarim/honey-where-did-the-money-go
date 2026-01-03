@@ -24,11 +24,11 @@ export function CategoryTransactionsModal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4 animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl max-w-lg w-full shadow-2xl max-h-[85vh] flex flex-col"
+        className="bg-white rounded-2xl max-w-lg w-full shadow-2xl max-h-[85vh] flex flex-col animate-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-6 border-b border-slate-100">

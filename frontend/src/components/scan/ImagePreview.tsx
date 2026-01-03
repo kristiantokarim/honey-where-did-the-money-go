@@ -21,7 +21,10 @@ export function ImagePreview({
     <>
       {/* Lightbox */}
       {isZoomed && (
-        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-4 animate-fade-in"
+          onClick={onCloseZoom}
+        >
           <button
             onClick={onCloseZoom}
             className="absolute top-6 right-6 bg-white/10 text-white p-3 rounded-full backdrop-blur-md active:scale-90 min-w-[44px] min-h-[44px]"
@@ -30,8 +33,9 @@ export function ImagePreview({
           </button>
           <img
             src={imageUrl}
-            alt="Full Receipt"
-            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            alt="Full Screenshot"
+            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl animate-zoom-in"
+            onClick={(e) => e.stopPropagation()}
           />
         </div>
       )}
