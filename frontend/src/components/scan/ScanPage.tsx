@@ -1,30 +1,40 @@
 import { useState, useCallback, type ChangeEvent } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { useTransactionContext } from '../../context/TransactionContext';
 import { useAppContext } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
+import { useUpload } from '../../context/UploadContext';
 import { useImagePreview } from '../../hooks/useImagePreview';
 import { transactionService } from '../../services/transactions';
 import { FileUpload } from './FileUpload';
 import { ImagePreview } from './ImagePreview';
 import { TransactionItem } from './TransactionItem';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { UploadProgress } from './UploadProgress';
 import type { ParsedTransaction } from '../../types';
 
 export function ScanPage() {
   const navigate = useNavigate();
   const { config, defaultUser, setDefaultUser } = useAppContext();
-  const { scanData, setScanData } = useTransactionContext();
   const { showToast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const {
+    isUploading,
+    progress,
+    results,
+    previewUrl,
+    startUpload,
+    clearResults,
+    updateResult,
+    removeResult,
+    toggleDuplicate,
+  } = useUpload();
+
   const [selectedApp, setSelectedApp] = useState('auto');
   const [removingIndex, setRemovingIndex] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
   const {
-    previewUrl,
     showImage,
     isZoomed,
-    setPreviewFromFile,
-    clearPreview,
     toggleImage,
     openZoom,
     closeZoom,
@@ -35,102 +45,66 @@ export function ScanPage() {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      setPreviewFromFile(file);
-      setLoading(true);
-
-      try {
-        const appType = selectedApp === 'auto' ? undefined : selectedApp;
-        const result = await transactionService.upload(file, appType);
-        const duplicateCheck = await transactionService.checkDuplicates(
-          result.transactions.map((t) => ({
-            date: t.date,
-            total: t.total,
-            to: t.to,
-            expense: t.expense,
-          }))
-        );
-
-        const transactionsWithDuplicates: ParsedTransaction[] = result.transactions.map(
-          (item, idx) => ({
-            ...item,
-            by: defaultUser,
-            remarks: '',
-            isExcluded: false,
-            isDuplicate: duplicateCheck[idx].exists,
-            imageUrl: result.imageUrl,
-          })
-        );
-
-        setScanData(transactionsWithDuplicates);
-        showToast(`Found ${transactionsWithDuplicates.length} transaction(s)`, 'success');
-      } catch (error) {
-        console.error('Error processing image:', error);
-        showToast('Failed to process image. Please try again.', 'error');
-      } finally {
-        setLoading(false);
-      }
+      const appType = selectedApp === 'auto' ? undefined : selectedApp;
+      await startUpload(file, appType, defaultUser);
     },
-    [defaultUser, selectedApp, setScanData, setPreviewFromFile, showToast]
+    [defaultUser, selectedApp, startUpload]
   );
 
   const handleUpdateTransaction = useCallback(
     (index: number, field: keyof ParsedTransaction, value: string | number) => {
-      setScanData(
-        scanData.map((tx, i) => (i === index ? { ...tx, [field]: value } : tx))
-      );
+      updateResult(index, field, value);
     },
-    [scanData, setScanData]
+    [updateResult]
   );
 
   const handleRemoveConfirm = useCallback(() => {
     if (removingIndex === null) return;
-    setScanData(scanData.filter((_, i) => i !== removingIndex));
+    removeResult(removingIndex);
     setRemovingIndex(null);
-  }, [removingIndex, scanData, setScanData]);
+  }, [removingIndex, removeResult]);
 
   const handleToggleDuplicate = useCallback(
     (index: number) => {
-      setScanData(
-        scanData.map((tx, i) =>
-          i === index ? { ...tx, isDuplicate: !tx.isDuplicate } : tx
-        )
-      );
+      toggleDuplicate(index);
     },
-    [scanData, setScanData]
+    [toggleDuplicate]
   );
 
   const isSaveable = (tx: ParsedTransaction) => {
-    // Don't save if marked as duplicate (unless user overrides)
     if (tx.isDuplicate) return false;
-    // Don't save failed/cancelled transactions
     if (tx.isValid === false) return false;
     return true;
   };
 
   const handleSave = useCallback(async () => {
-    const itemsToSave = scanData.filter(isSaveable);
+    const itemsToSave = results.filter(isSaveable);
     if (!itemsToSave.length) return;
 
     try {
-      setLoading(true);
+      setSaving(true);
       await transactionService.confirm(itemsToSave);
       showToast(`Saved ${itemsToSave.length} transaction(s)`, 'success');
-      setScanData([]);
-      clearPreview();
+      clearResults();
       navigate({ to: '/ledger' });
     } catch (error) {
       console.error('Save failed:', error);
       showToast('Failed to save transactions. Please try again.', 'error');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
-  }, [scanData, setScanData, clearPreview, navigate, showToast]);
+  }, [results, clearResults, navigate, showToast]);
 
-  const validCount = scanData.filter(isSaveable).length;
+  const validCount = results.filter(isSaveable).length;
+
+  // Show upload progress when uploading
+  if (isUploading) {
+    return <UploadProgress step={progress.step} message={progress.message} />;
+  }
 
   return (
     <div className="space-y-4">
-      {previewUrl && scanData.length > 0 && (
+      {previewUrl && results.length > 0 && (
         <ImagePreview
           imageUrl={previewUrl}
           showImage={showImage}
@@ -141,7 +115,7 @@ export function ScanPage() {
         />
       )}
 
-      {scanData.map((tx, i) => (
+      {results.map((tx, i) => (
         <TransactionItem
           key={i}
           transaction={tx}
@@ -152,7 +126,7 @@ export function ScanPage() {
         />
       ))}
 
-      {scanData.length === 0 ? (
+      {results.length === 0 ? (
         <div className="space-y-4">
           <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm space-y-4">
             <div>
@@ -191,15 +165,15 @@ export function ScanPage() {
               </select>
             </div>
           </div>
-          <FileUpload loading={loading} onFileSelect={handleFileUpload} />
+          <FileUpload loading={false} onFileSelect={handleFileUpload} />
         </div>
       ) : (
         <button
           onClick={handleSave}
-          disabled={loading || validCount === 0}
+          disabled={saving || validCount === 0}
           className="w-full bg-slate-900 py-4 rounded-2xl font-bold text-white shadow-xl min-h-[56px] disabled:opacity-50"
         >
-          {loading ? 'Saving...' : `Record ${validCount} Items`}
+          {saving ? 'Saving...' : `Record ${validCount} Items`}
         </button>
       )}
 
