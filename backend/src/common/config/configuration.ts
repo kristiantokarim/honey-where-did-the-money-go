@@ -13,4 +13,7 @@ export default () => ({
   google: {
     apiKey: process.env.GOOGLE_API_KEY,
   },
+  cors: {
+    origins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173'],
+  },
 });

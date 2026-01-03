@@ -55,7 +55,7 @@ export const transactionService = {
     if (sortBy) params.sortBy = sortBy;
 
     const response = await api.get<Transaction[]>('/transactions/history', {
-      params,
+      params
     });
     return response.data;
   },
