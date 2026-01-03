@@ -1,27 +1,24 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { configService } from '../services/config';
+import { useToast } from './ToastContext';
 import type { AppConfig } from '../types';
 
 interface AppContextValue {
   config: AppConfig | null;
   configLoading: boolean;
+  configError: boolean;
   defaultUser: string;
   setDefaultUser: (user: string) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-// Default config as fallback
-const DEFAULT_CONFIG: AppConfig = {
-  categories: ['Food', 'Transport', 'Wifi', 'Insurance', 'Rent', 'Top-up', 'Bills', 'Others'],
-  users: ['Kris', 'Iven'],
-  paymentMethods: ['Gojek', 'OVO', 'BCA', 'Grab'],
-};
-
 export function AppProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
-  const [defaultUser, setDefaultUser] = useState('Kris');
+  const [configError, setConfigError] = useState(false);
+  const [defaultUser, setDefaultUser] = useState('');
+  const { showToast } = useToast();
 
   useEffect(() => {
     const loadConfig = async () => {
@@ -32,21 +29,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setDefaultUser(data.users[0]);
         }
       } catch (error) {
-        console.warn('Failed to load config, using defaults:', error);
-        setConfig(DEFAULT_CONFIG);
+        console.error('Failed to load config:', error);
+        setConfigError(true);
+        showToast('Failed to connect to server', 'error');
       } finally {
         setConfigLoading(false);
       }
     };
 
     loadConfig();
-  }, []);
+  }, [showToast]);
 
   return (
     <AppContext.Provider
       value={{
-        config: config || DEFAULT_CONFIG,
+        config,
         configLoading,
+        configError,
         defaultUser,
         setDefaultUser,
       }}

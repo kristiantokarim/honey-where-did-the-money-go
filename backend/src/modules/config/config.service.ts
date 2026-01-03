@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ParserFactory } from '../parser/parser.factory';
 
 export interface AppConfig {
   categories: string[];
@@ -8,7 +9,9 @@ export interface AppConfig {
 
 @Injectable()
 export class ConfigAppService {
-  // For now, return static values
+  constructor(private readonly parserFactory: ParserFactory) {}
+
+  // For now, return static values for categories/users
   // Later with auth, these will be fetched from database per user/household
   getConfig(): AppConfig {
     return {
@@ -23,7 +26,7 @@ export class ConfigAppService {
         'Others',
       ],
       users: ['Kris', 'Iven'],
-      paymentMethods: ['Gojek', 'OVO', 'BCA', 'Grab'],
+      paymentMethods: this.parserFactory.getSupportedApps(),
     };
   }
 }

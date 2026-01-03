@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { transactionService } from '../services/transactions';
+import { useToast } from './ToastContext';
 import { getMonthRange } from '../utils/format';
 import type { Transaction, ParsedTransaction, DashboardItem } from '../types';
 
@@ -43,6 +44,8 @@ interface TransactionContextValue {
 const TransactionContext = createContext<TransactionContextValue | null>(null);
 
 export function TransactionProvider({ children }: { children: ReactNode }) {
+  const { showToast } = useToast();
+
   // Scan state
   const [scanData, setScanData] = useState<ParsedTransaction[]>([]);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -76,10 +79,11 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
       setHistoryData(data);
     } catch (error) {
       console.error('Failed to fetch history:', error);
+      showToast('Failed to load transactions', 'error');
     } finally {
       setHistoryLoading(false);
     }
-  }, [dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by]);
+  }, [dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by, showToast]);
 
   const refreshDashboard = useCallback(async () => {
     setDashLoading(true);
@@ -88,10 +92,11 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
       setDashData(data);
     } catch (error) {
       console.error('Failed to fetch dashboard:', error);
+      showToast('Failed to load dashboard', 'error');
     } finally {
       setDashLoading(false);
     }
-  }, [dateFilter.start, dateFilter.end]);
+  }, [dateFilter.start, dateFilter.end, showToast]);
 
   return (
     <TransactionContext.Provider
