@@ -1,6 +1,6 @@
 # honey-where-did-the-money-go
 
-A full-stack expense tracking application with AI-powered receipt scanning. Built for tracking shared household expenses with support for Indonesian e-money payment apps.
+A full-stack expense tracking application with AI-powered transaction history scanning. Built for tracking shared household expenses with support for Indonesian e-money payment apps.
 
 ---
 
@@ -119,12 +119,12 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 
 ## Features
 
-### Receipt Scanning (Scan Tab)
-- Upload receipt screenshots from Indonesian e-money apps
+### Transaction History Scanning (Scan Tab)
+- Upload transaction history screenshots from Indonesian e-money apps
 - AI-powered parsing using Google Gemini API
 - Auto-detects payment app type: **Gojek, OVO, BCA, Grab** (or manual selection)
 - Extracts transaction details: date, amount, merchant, category
-- Receipt images stored in MinIO and linked to transactions
+- Screenshots stored in MinIO and linked to transactions
 - Smart duplicate detection with fuzzy matching on merchant/expense names
 - Override false-positive duplicates with "Keep anyway" option
 - Auto-skips failed/cancelled transactions
@@ -138,7 +138,7 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 - Full editing capabilities:
   - Edit date, category, amount, merchant, payment source, user, remarks
   - Exclude transactions from dashboard calculations
-- View original receipt image (lightbox preview)
+- View original screenshot (lightbox preview)
 - Delete transactions with confirmation dialog
 - Formatted currency display (IDR)
 - Effective total calculation (excluding marked transactions)
