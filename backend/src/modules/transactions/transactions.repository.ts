@@ -1,6 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { and, eq, gte, lte, desc, sql } from 'drizzle-orm';
+import { and, eq, gte, lte, desc, sql, inArray } from 'drizzle-orm';
 import { DATABASE_TOKEN } from '../../database/database.provider';
 import * as schema from '../../database/schema';
 import { transactions, Transaction, NewTransaction } from '../../database/schema';
@@ -29,6 +29,14 @@ export class TransactionsRepository {
       .from(transactions)
       .where(eq(transactions.id, id));
     return result;
+  }
+
+  async findByIds(ids: number[]): Promise<Transaction[]> {
+    if (ids.length === 0) return [];
+    return await this.db
+      .select()
+      .from(transactions)
+      .where(inArray(transactions.id, ids));
   }
 
   async findByDateRange(
@@ -157,6 +165,8 @@ export class TransactionsRepository {
       .where(
         and(
           eq(transactions.isExcluded, false),
+          sql`${transactions.linkedTransferId} IS NULL`,
+          eq(transactions.transactionType, 'expense'),
           gte(transactions.date, startDate),
           lte(transactions.date, endDate),
         ),
@@ -173,5 +183,84 @@ export class TransactionsRepository {
     return Object.entries(categories)
       .map(([name, total]) => ({ name, total }))
       .sort((a, b) => b.total - a.total);
+  }
+
+  async findPotentialTransferMatches(
+    items: Array<{ transactionType: string; total: number; date: string; payment: string }>,
+  ): Promise<Array<{ index: number; match: Transaction | null }>> {
+    return await Promise.all(
+      items.map(async (item, index) => {
+        // Only check for transfers
+        if (!['transfer_out', 'transfer_in'].includes(item.transactionType)) {
+          return { index, match: null };
+        }
+
+        const oppositeType = item.transactionType === 'transfer_out' ? 'transfer_in' : 'transfer_out';
+
+        // Parse the date to check ±1 day
+        const itemDate = new Date(item.date);
+        const dayBefore = new Date(itemDate);
+        dayBefore.setDate(dayBefore.getDate() - 1);
+        const dayAfter = new Date(itemDate);
+        dayAfter.setDate(dayAfter.getDate() + 1);
+
+        const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+        // Find candidates: opposite type, same amount, within ±1 day, different app, not already linked
+        const candidates = await this.db
+          .select()
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.transactionType, oppositeType),
+              eq(transactions.total, item.total),
+              gte(transactions.date, formatDate(dayBefore)),
+              lte(transactions.date, formatDate(dayAfter)),
+              sql`${transactions.payment} != ${item.payment}`,
+              sql`${transactions.linkedTransferId} IS NULL`,
+            ),
+          );
+
+        if (candidates.length === 0) {
+          return { index, match: null };
+        }
+
+        // Return the first match (closest by date would be ideal, but for now return first)
+        // Could improve by sorting by date proximity
+        return { index, match: candidates[0] };
+      }),
+    );
+  }
+
+  async linkTransfers(id1: number, id2: number): Promise<void> {
+    await this.db
+      .update(transactions)
+      .set({ linkedTransferId: id2 })
+      .where(eq(transactions.id, id1));
+
+    await this.db
+      .update(transactions)
+      .set({ linkedTransferId: id1 })
+      .where(eq(transactions.id, id2));
+  }
+
+  async unlinkTransfer(id: number): Promise<void> {
+    const transaction = await this.findById(id);
+    if (!transaction || !transaction.linkedTransferId) {
+      return;
+    }
+
+    const partnerId = transaction.linkedTransferId;
+
+    // Clear both sides
+    await this.db
+      .update(transactions)
+      .set({ linkedTransferId: null })
+      .where(eq(transactions.id, id));
+
+    await this.db
+      .update(transactions)
+      .set({ linkedTransferId: null })
+      .where(eq(transactions.id, partnerId));
   }
 }

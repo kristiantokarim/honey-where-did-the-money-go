@@ -22,6 +22,16 @@ export const transactionService = {
     return response.data;
   },
 
+  checkTransferMatches: async (
+    items: Array<{ transactionType: string; total: number; date: string; payment: string }>
+  ): Promise<Array<{ index: number; match: Transaction | null }>> => {
+    const response = await api.post<Array<{ index: number; match: Transaction | null }>>(
+      '/transactions/check-transfer-matches',
+      items
+    );
+    return response.data;
+  },
+
   confirm: async (
     items: ParsedTransaction[]
   ): Promise<{ success: boolean; count: number }> => {
@@ -70,5 +80,9 @@ export const transactionService = {
 
   delete: async (id: number): Promise<void> => {
     await api.delete(`/transactions/${id}`);
+  },
+
+  unlinkTransfer: async (id: number): Promise<void> => {
+    await api.delete(`/transactions/${id}/link`);
   },
 };

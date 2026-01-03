@@ -122,11 +122,16 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 ### Transaction History Scanning (Scan Tab)
 - Upload transaction history screenshots from Indonesian e-money apps
 - AI-powered parsing using Google Gemini API
-- Auto-detects payment app type: **Gojek, OVO, BCA, Grab** (or manual selection)
+- Auto-detects payment app type: **Gojek, OVO, BCA, Grab, Dana, Jenius, Jago, Danamon** (or manual selection)
 - Extracts transaction details: date, amount, merchant, category
+- **Transaction type detection**: AI classifies as expense, income, transfer_out, or transfer_in
 - Screenshots stored in MinIO and linked to transactions
 - Smart duplicate detection with fuzzy matching on merchant/expense names
 - Override false-positive duplicates with "Keep anyway" option
+- **Transfer matching**: Auto-detects when a transfer matches an existing transaction (e.g., "Transfer to Dana" matches "Received from Gojek")
+  - Expandable preview showing matched transaction details and screenshot
+  - "Keep Separate" option for false positives
+  - Auto-links matched transfers on confirm
 - Auto-skips failed/cancelled transactions
 - Manual field editing before confirmation
 - Confirmation dialog before removing scanned items
@@ -135,13 +140,16 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 - View all recorded transactions
 - Date range filtering (defaults to current month)
 - Filter by category and user
+- **Transaction type badges**: Visual indicators for income, transfer_out, transfer_in
+- **Linked transfers**: "Matched" badge with expandable view showing linked transaction details and screenshot
+- **Unlink transfers**: Correct false-positive matches after save
 - Full editing capabilities:
   - Edit date, category, amount, merchant, payment source, user, remarks
   - Exclude transactions from dashboard calculations
 - View original screenshot (lightbox preview)
 - Delete transactions with confirmation dialog
 - Formatted currency display (IDR)
-- Effective total calculation (excluding marked transactions)
+- **Total modes**: Toggle between "Expenses Only" and "Net Total" (expenses - income)
 
 ### Dashboard (Dash Tab)
 - Spending summary by category
@@ -175,11 +183,13 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 |--------|----------|-------------|
 | POST | `/transactions/upload` | Upload & parse receipt image |
 | POST | `/transactions/check-duplicates` | Check for duplicate transactions |
+| POST | `/transactions/check-transfer-matches` | Find matching transfers in database |
 | POST | `/transactions/confirm` | Save scanned transactions to database |
 | GET | `/transactions/history` | Fetch transactions with date range |
 | GET | `/transactions/dashboard` | Get spending summary by category |
 | PUT | `/transactions/:id` | Update a transaction |
 | DELETE | `/transactions/:id` | Delete a transaction |
+| DELETE | `/transactions/:id/link` | Unlink matched transfer pair |
 
 ---
 
@@ -255,11 +265,15 @@ backend/src/
     │   ├── parser.service.ts         # Orchestrator
     │   ├── parser.factory.ts         # Strategy factory
     │   └── strategies/               # Payment app parsers
-    │       ├── base.parser.ts
+    │       ├── base.parser.ts        # Abstract base with type detection
     │       ├── gojek.parser.ts
     │       ├── ovo.parser.ts
     │       ├── bca.parser.ts
     │       ├── grab.parser.ts
+    │       ├── dana.parser.ts
+    │       ├── jenius.parser.ts
+    │       ├── jago.parser.ts
+    │       ├── danamon.parser.ts
     │       └── default.parser.ts
     │
     ├── storage/                      # MinIO storage
@@ -277,23 +291,23 @@ backend/src/
 
 ## Adding a New Payment Parser
 
-To add support for a new payment app (e.g., Dana):
+To add support for a new payment app (e.g., Allo Bank):
 
 1. Create a new parser in `backend/src/modules/parser/strategies/`:
 
 ```typescript
-// dana.parser.ts
+// allo.parser.ts
 import { BaseParser } from './base.parser';
 
-export class DanaParser extends BaseParser {
-  readonly appType = 'Dana';
+export class AlloParser extends BaseParser {
+  readonly appType = 'Allo';
 
   canParse(detectedApp: string): boolean {
-    return detectedApp.toLowerCase() === 'dana';
+    return detectedApp.toLowerCase() === 'allo';
   }
 
   getPrompt(): string {
-    return `Extract Dana transaction history from this screenshot...`;
+    return `Extract Allo Bank transaction history from this screenshot...`;
   }
 }
 ```
@@ -303,13 +317,13 @@ export class DanaParser extends BaseParser {
 ```typescript
 this.parsers = [
   new GojekParser(),
-  new DanaParser(),  // Add here
+  new AlloParser(),  // Add here
   new OVOParser(),
   // ...
 ];
 ```
 
-3. Update the app detection prompt in `parser.service.ts` to include "Dana" as an option.
+3. Update the app detection prompt in `parser.service.ts` to include "Allo" as an option.
 
 ---
 
@@ -417,4 +431,9 @@ docker compose down -v
 ### Quality of Life
 - [ ] Undo/restore deleted transactions
 - [ ] Dark mode
+
+### Upload Experience
+- [ ] Cancel upload in progress
+- [ ] Persist upload across page refresh (backend job queue)
+- [ ] Multiple file upload queue
 

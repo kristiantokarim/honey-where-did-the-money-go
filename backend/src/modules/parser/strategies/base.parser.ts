@@ -46,7 +46,8 @@ Return ONLY a JSON array with this exact structure: [{
   "total": number (Absolute value),
   "payment": "${this.appType}",
   "status": "string",
-  "isValid": boolean
+  "isValid": boolean,
+  "transactionType": "expense|income|transfer_out|transfer_in"
 }].
 
 Rules:
@@ -54,7 +55,13 @@ Rules:
 - 'quantity' is 1.
 - 'by' should be empty (user will fill).
 - isValid is false if status is failed/cancelled.
-- In Indonesia, 'Rp. 34.000' means '34000' rupiah.`;
+- In Indonesia, 'Rp. 34.000' means '34000' rupiah.
+
+Transaction Type Detection:
+- "Transfer to [App]", "Top Up to [App]", "Send to [Account]", "Kirim ke" → transactionType: "transfer_out"
+- "Received from [App]", "Top Up from [Account]", "Transfer from", "Terima dari" → transactionType: "transfer_in"
+- "Cashback", "Refund", "Reward", salary deposits, "Pengembalian" → transactionType: "income"
+- Everything else (purchases, payments, fees, orders) → transactionType: "expense"`;
   }
 
   protected extractJson(text: string): ParsedTransaction[] {
@@ -74,6 +81,7 @@ Rules:
         remarks: item.remarks,
         status: item.status,
         isValid: item.isValid !== false,
+        transactionType: item.transactionType || 'expense',
       }));
     } catch (error) {
       this.logger.error(`Failed to parse JSON response: ${error.message}`);

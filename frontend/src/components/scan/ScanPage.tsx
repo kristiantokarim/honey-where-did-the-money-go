@@ -26,11 +26,13 @@ export function ScanPage() {
     updateResult,
     removeResult,
     toggleDuplicate,
+    toggleKeepSeparate,
   } = useUpload();
 
   const [selectedApp, setSelectedApp] = useState('auto');
   const [removingIndex, setRemovingIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [matchImageUrl, setMatchImageUrl] = useState<string | null>(null);
 
   const {
     showImage,
@@ -39,6 +41,9 @@ export function ScanPage() {
     openZoom,
     closeZoom,
   } = useImagePreview();
+
+  // Separate state for viewing matched transaction's image
+  const [matchImageZoomed, setMatchImageZoomed] = useState(false);
 
   const handleFileUpload = useCallback(
     async (e: ChangeEvent<HTMLInputElement>) => {
@@ -123,6 +128,11 @@ export function ScanPage() {
           onUpdate={handleUpdateTransaction}
           onRemove={setRemovingIndex}
           onToggleDuplicate={handleToggleDuplicate}
+          onToggleKeepSeparate={toggleKeepSeparate}
+          onViewImage={(url) => {
+            setMatchImageUrl(url);
+            setMatchImageZoomed(true);
+          }}
         />
       ))}
 
@@ -185,6 +195,24 @@ export function ScanPage() {
         onConfirm={handleRemoveConfirm}
         onCancel={() => setRemovingIndex(null)}
       />
+
+      {/* Lightbox for matched transaction's image */}
+      {matchImageZoomed && matchImageUrl && (
+        <div
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => {
+            setMatchImageZoomed(false);
+            setMatchImageUrl(null);
+          }}
+        >
+          <img
+            src={matchImageUrl}
+            alt="Matched transaction screenshot"
+            className="max-h-[90vh] max-w-full object-contain rounded-lg animate-zoom-in"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

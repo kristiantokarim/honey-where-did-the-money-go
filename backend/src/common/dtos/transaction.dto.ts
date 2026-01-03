@@ -43,6 +43,18 @@ export class CreateTransactionDto {
   @IsString()
   @IsOptional()
   imageUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  transactionType?: string;
+
+  @IsNumber()
+  @IsOptional()
+  linkedTransferId?: number;
+
+  @IsNumber()
+  @IsOptional()
+  matchedTransactionId?: number;
 }
 
 export class UpdateTransactionDto {
@@ -95,6 +107,10 @@ export class UpdateTransactionDto {
   @IsBoolean()
   @IsOptional()
   isExcluded?: boolean;
+
+  @IsString()
+  @IsOptional()
+  transactionType?: string;
 }
 
 export class DateRangeQueryDto {
@@ -131,4 +147,19 @@ export class DuplicateCheckItemDto {
   @IsString()
   @IsOptional()
   expense?: string;
+}
+
+export class CheckTransferMatchDto {
+  @IsString()
+  transactionType: string;
+
+  @IsNumber()
+  @Type(() => Number)
+  total: number;
+
+  @IsString()
+  date: string;
+
+  @IsString()
+  payment: string;
 }

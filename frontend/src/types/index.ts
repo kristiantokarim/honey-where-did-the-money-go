@@ -1,3 +1,5 @@
+export type TransactionType = 'expense' | 'income' | 'transfer_out' | 'transfer_in';
+
 export interface Transaction {
   id: number;
   date: string;
@@ -12,12 +14,19 @@ export interface Transaction {
   remarks?: string;
   imageUrl?: string;
   isExcluded?: boolean;
+  transactionType?: TransactionType;
+  linkedTransferId?: number;
+  linkedTransaction?: Transaction;
 }
 
 export interface ParsedTransaction extends Omit<Transaction, 'id'> {
   isDuplicate?: boolean;
   isValid?: boolean;
   status?: string;
+  transactionType?: TransactionType;
+  transferMatch?: Transaction;
+  keepSeparate?: boolean;
+  matchedTransactionId?: number;
 }
 
 export interface DashboardItem {

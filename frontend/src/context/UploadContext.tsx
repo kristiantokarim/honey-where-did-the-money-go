@@ -31,6 +31,7 @@ interface UploadContextValue {
   updateResult: (index: number, field: keyof ParsedTransaction, value: string | number | boolean) => void;
   removeResult: (index: number) => void;
   toggleDuplicate: (index: number) => void;
+  toggleKeepSeparate: (index: number) => void;
 }
 
 const PROGRESS_MESSAGES: Record<UploadStep, string> = {
@@ -87,27 +88,43 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         setStep('extracting');
         const result = await transactionService.upload(file, appType);
 
-        // Step 4: Check duplicates
+        // Step 4: Check duplicates and transfer matches
         setStep('checking');
-        const duplicateCheck = await transactionService.checkDuplicates(
-          result.transactions.map((t) => ({
-            date: t.date,
-            total: t.total,
-            to: t.to,
-            expense: t.expense,
-          }))
-        );
+        const [duplicateCheck, transferMatches] = await Promise.all([
+          transactionService.checkDuplicates(
+            result.transactions.map((t) => ({
+              date: t.date,
+              total: t.total,
+              to: t.to,
+              expense: t.expense,
+            }))
+          ),
+          transactionService.checkTransferMatches(
+            result.transactions.map((t) => ({
+              transactionType: t.transactionType || 'expense',
+              total: t.total,
+              date: t.date,
+              payment: t.payment,
+            }))
+          ),
+        ]);
 
         // Process results
         const transactionsWithMeta: ParsedTransaction[] = result.transactions.map(
-          (item, idx) => ({
-            ...item,
-            by: defaultUser,
-            remarks: '',
-            isExcluded: false,
-            isDuplicate: duplicateCheck[idx].exists,
-            imageUrl: result.imageUrl,
-          })
+          (item, idx) => {
+            const transferMatch = transferMatches.find((m) => m.index === idx)?.match;
+            return {
+              ...item,
+              by: defaultUser,
+              remarks: '',
+              isExcluded: false,
+              isDuplicate: duplicateCheck[idx].exists,
+              imageUrl: result.imageUrl,
+              transferMatch: transferMatch || undefined,
+              matchedTransactionId: transferMatch?.id,
+              keepSeparate: false,
+            };
+          }
         );
 
         setResults(transactionsWithMeta);
@@ -154,6 +171,21 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const toggleKeepSeparate = useCallback((index: number) => {
+    setResults((prev) =>
+      prev.map((tx, i) => {
+        if (i !== index) return tx;
+        const keepSeparate = !tx.keepSeparate;
+        return {
+          ...tx,
+          keepSeparate,
+          // Clear matchedTransactionId if keeping separate
+          matchedTransactionId: keepSeparate ? undefined : tx.transferMatch?.id,
+        };
+      })
+    );
+  }, []);
+
   return (
     <UploadContext.Provider
       value={{
@@ -167,6 +199,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         updateResult,
         removeResult,
         toggleDuplicate,
+        toggleKeepSeparate,
       }}
     >
       {children}

@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { useTransactionContext } from '../../context/TransactionContext';
 import { useToast } from '../../context/ToastContext';
 import { useTransactions } from '../../hooks/useTransactions';
+import { transactionService } from '../../services/transactions';
 import { formatIDR } from '../../utils/format';
 import { LedgerFilters } from './LedgerFilters';
 import { TransactionCard } from './TransactionCard';
@@ -24,6 +25,8 @@ export function LedgerPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [unlinkingId, setUnlinkingId] = useState<number | null>(null);
+  const [showNetTotal, setShowNetTotal] = useState(false);
 
   useEffect(() => {
     refreshHistory();
@@ -60,6 +63,18 @@ export function LedgerPage() {
     setDeletingId(null);
   }, [deletingId, deleteTransaction, showToast]);
 
+  const handleUnlinkConfirm = useCallback(async () => {
+    if (unlinkingId === null) return;
+    try {
+      await transactionService.unlinkTransfer(unlinkingId);
+      showToast('Transfer unlinked', 'success');
+      refreshHistory();
+    } catch {
+      showToast('Failed to unlink transfer', 'error');
+    }
+    setUnlinkingId(null);
+  }, [unlinkingId, showToast, refreshHistory]);
+
   const handleLocalChange = useCallback(
     (id: number, field: keyof Transaction, value: Transaction[keyof Transaction]) => {
       updateLocalTransaction(id, field, value);
@@ -67,9 +82,32 @@ export function LedgerPage() {
     [updateLocalTransaction]
   );
 
-  const effectiveTotal = historyData
-    .filter((t) => !t.isExcluded)
-    .reduce((sum, t) => sum + t.total, 0);
+  // Calculate totals based on mode
+  const calculateTotal = () => {
+    const nonExcluded = historyData.filter((t) => !t.isExcluded);
+
+    if (showNetTotal) {
+      // Net total: expenses - income, excluding linked transfers (they cancel out)
+      return nonExcluded
+        .filter((t) => !t.linkedTransferId)
+        .reduce((sum, t) => {
+          if (t.transactionType === 'income') {
+            return sum - t.total; // Subtract income
+          }
+          return sum + t.total; // Add expenses and unlinked transfers
+        }, 0);
+    } else {
+      // Expense only: only count expense type, exclude linked transfers
+      return nonExcluded
+        .filter((t) =>
+          !t.linkedTransferId &&
+          (t.transactionType === 'expense' || !t.transactionType)
+        )
+        .reduce((sum, t) => sum + t.total, 0);
+    }
+  };
+
+  const effectiveTotal = calculateTotal();
 
   if (historyLoading && historyData.length === 0) {
     return (
@@ -83,11 +121,19 @@ export function LedgerPage() {
     <div className="space-y-3">
       <LedgerFilters />
 
-      <div className="text-right px-2 pb-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
-        Effective Total:{' '}
-        <span className="font-black text-slate-800 text-lg ml-1">
-          {formatIDR(effectiveTotal)}
-        </span>
+      <div className="flex justify-between items-center px-2 pb-2">
+        <button
+          onClick={() => setShowNetTotal(!showNetTotal)}
+          className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full min-h-[32px]"
+        >
+          {showNetTotal ? 'Net Total' : 'Expenses Only'}
+        </button>
+        <div className="text-right text-xs font-bold text-slate-400 uppercase tracking-widest">
+          Total:{' '}
+          <span className={`font-black text-lg ml-1 ${effectiveTotal < 0 ? 'text-green-600' : 'text-slate-800'}`}>
+            {effectiveTotal < 0 ? '+' : ''}{formatIDR(Math.abs(effectiveTotal))}
+          </span>
+        </div>
       </div>
 
       {historyData.map((tx) =>
@@ -103,10 +149,17 @@ export function LedgerPage() {
           <TransactionCard
             key={tx.id}
             transaction={tx}
+            linkedTransaction={tx.linkedTransaction}
             onEdit={() => setEditingId(tx.id)}
             onToggleExclude={() => handleToggleExclude(tx.id)}
             onDelete={() => setDeletingId(tx.id)}
             onViewImage={tx.imageUrl ? () => setViewingImageUrl(tx.imageUrl!) : undefined}
+            onUnlink={tx.linkedTransferId ? () => setUnlinkingId(tx.id) : undefined}
+            onViewLinkedImage={
+              tx.linkedTransaction?.imageUrl
+                ? () => setViewingImageUrl(tx.linkedTransaction!.imageUrl!)
+                : undefined
+            }
           />
         )
       )}
@@ -145,6 +198,15 @@ export function LedgerPage() {
         message="Are you sure you want to delete this transaction? This action cannot be undone."
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeletingId(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={unlinkingId !== null}
+        title="Unlink Transfer"
+        message="Are you sure you want to unlink this transfer? Both transactions will remain but will no longer be matched."
+        confirmLabel="Unlink"
+        onConfirm={handleUnlinkConfirm}
+        onCancel={() => setUnlinkingId(null)}
       />
     </div>
   );

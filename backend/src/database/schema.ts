@@ -17,6 +17,8 @@ export const transactions = pgTable(
     paymentCorrection: text('payment_correction'),
     imageUrl: text('image_url'),
     isExcluded: boolean('is_excluded').default(false),
+    transactionType: text('transaction_type').default('expense'),
+    linkedTransferId: integer('linked_transfer_id'),
     createdAt: timestamp('created_at').defaultNow(),
   },
   (table) => [
@@ -24,6 +26,7 @@ export const transactions = pgTable(
     index('idx_transactions_category').on(table.category),
     index('idx_transactions_by').on(table.by),
     index('idx_transactions_date_category_by').on(table.date, table.category, table.by),
+    index('idx_transactions_type').on(table.transactionType),
   ],
 );
 

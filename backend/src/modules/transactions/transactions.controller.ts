@@ -19,6 +19,7 @@ import {
   UpdateTransactionDto,
   DateRangeQueryDto,
   DuplicateCheckItemDto,
+  CheckTransferMatchDto,
 } from '../../common/dtos/transaction.dto';
 
 @Controller('transactions')
@@ -46,6 +47,11 @@ export class TransactionsController {
   @Post('check-duplicates')
   async checkDuplicates(@Body() payload: DuplicateCheckItemDto[]) {
     return this.transactionsService.checkDuplicates(payload);
+  }
+
+  @Post('check-transfer-matches')
+  async checkTransferMatches(@Body() payload: CheckTransferMatchDto[]) {
+    return this.transactionsService.checkTransferMatches(payload);
   }
 
   @Post('confirm')
@@ -80,6 +86,12 @@ export class TransactionsController {
   @Delete(':id')
   async delete(@Param('id', ParseIntPipe) id: number) {
     await this.transactionsService.delete(id);
+    return { success: true };
+  }
+
+  @Delete(':id/link')
+  async unlinkTransfer(@Param('id', ParseIntPipe) id: number) {
+    await this.transactionsService.unlinkTransfer(id);
     return { success: true };
   }
 }
