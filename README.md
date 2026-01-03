@@ -19,6 +19,15 @@ So instead of continuing our monthly ritual of manual data entry and existential
 So instead of simplifying our financial life like normal people, we built ANOTHER APP to patch the chaos. "Why not use APIs?" you ask. Adorable. Half these apps don't expose APIs, and the ones that do (looking at you, Open Banking) charge fees that would defeat the purpose of all those discounts we're hoarding.
 
 **TL;DR**: We were too lazy to keep doing manual expense tracking, so we spent way more time building an app to automate it. Peak efficiency.
+---
+
+## Demo (Video)
+
+
+
+https://github.com/user-attachments/assets/1c95a321-9137-4bf1-9466-eb23602abf1a
+
+
 
 ---
 
