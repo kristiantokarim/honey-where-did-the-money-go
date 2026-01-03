@@ -1,4 +1,4 @@
-# EXP_TRACK - Expense Tracking Application
+# honey-where-did-the-money-go
 
 A full-stack expense tracking application with AI-powered receipt scanning. Built for tracking shared household expenses with support for Indonesian e-money payment apps.
 
