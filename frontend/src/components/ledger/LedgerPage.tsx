@@ -26,6 +26,7 @@ export function LedgerPage() {
   const [viewingImageUrl, setViewingImageUrl] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [unlinkingId, setUnlinkingId] = useState<number | null>(null);
+  const [unlinkingForwardedId, setUnlinkingForwardedId] = useState<number | null>(null);
   const [showNetTotal, setShowNetTotal] = useState(false);
   const [ledgerTotal, setLedgerTotal] = useState<number>(0);
   const [totalLoading, setTotalLoading] = useState(false);
@@ -100,6 +101,18 @@ export function LedgerPage() {
     setUnlinkingId(null);
   }, [unlinkingId, showToast, refreshHistory]);
 
+  const handleUnlinkForwardedConfirm = useCallback(async () => {
+    if (unlinkingForwardedId === null) return;
+    try {
+      await transactionService.unlinkForwarded(unlinkingForwardedId);
+      showToast('CC link removed', 'success');
+      refreshHistory();
+    } catch {
+      showToast('Failed to unlink CC transaction', 'error');
+    }
+    setUnlinkingForwardedId(null);
+  }, [unlinkingForwardedId, showToast, refreshHistory]);
+
   const handleLocalChange = useCallback(
     (id: number, field: keyof Transaction, value: Transaction[keyof Transaction]) => {
       updateLocalTransaction(id, field, value);
@@ -148,14 +161,22 @@ export function LedgerPage() {
             key={tx.id}
             transaction={tx}
             linkedTransaction={tx.linkedTransaction}
+            forwardedCcTransactions={tx.forwardedCcTransactions}
             onEdit={() => setEditingId(tx.id)}
             onToggleExclude={() => handleToggleExclude(tx.id)}
             onDelete={() => setDeletingId(tx.id)}
             onViewImage={tx.imageUrl ? () => setViewingImageUrl(tx.imageUrl!) : undefined}
             onUnlink={tx.linkedTransferId ? () => setUnlinkingId(tx.id) : undefined}
+            onUnlinkForwarded={(ccTransactionId) => setUnlinkingForwardedId(ccTransactionId)}
+            onViewCcImage={(imageUrl) => setViewingImageUrl(imageUrl)}
             onViewLinkedImage={
               tx.linkedTransaction?.imageUrl
                 ? () => setViewingImageUrl(tx.linkedTransaction!.imageUrl!)
+                : undefined
+            }
+            onViewForwardedImage={
+              tx.forwardedTransaction?.imageUrl
+                ? () => setViewingImageUrl(tx.forwardedTransaction!.imageUrl!)
                 : undefined
             }
           />
@@ -192,6 +213,15 @@ export function LedgerPage() {
         confirmLabel="Unlink"
         onConfirm={handleUnlinkConfirm}
         onCancel={() => setUnlinkingId(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={unlinkingForwardedId !== null}
+        title="Unlink CC Transaction"
+        message="Are you sure you want to unlink this CC transaction? It will be counted separately in totals."
+        confirmLabel="Unlink"
+        onConfirm={handleUnlinkForwardedConfirm}
+        onCancel={() => setUnlinkingForwardedId(null)}
       />
     </div>
   );

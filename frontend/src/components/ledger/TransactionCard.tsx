@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Edit3, Ban, Trash2, Image, Link2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Edit3, Ban, Trash2, Image, Link2, ChevronDown, ChevronUp, CreditCard, AlertCircle } from 'lucide-react';
 import { formatIDR, formatDate } from '../../utils/format';
 import { getTypeBadge } from '../../utils/transactionBadge';
 import type { Transaction } from '../../types';
@@ -7,17 +7,23 @@ import type { Transaction } from '../../types';
 interface TransactionCardProps {
   transaction: Transaction;
   linkedTransaction?: Transaction;
+  forwardedCcTransactions?: Transaction[];
   onEdit?: () => void;
   onToggleExclude?: () => void;
   onDelete?: () => void;
   onViewImage?: () => void;
   onUnlink?: () => void;
   onViewLinkedImage?: () => void;
+  onViewForwardedImage?: () => void;
+  onUnlinkForwarded?: (ccTransactionId: number) => void;
+  onViewCcImage?: (imageUrl: string) => void;
   readonly?: boolean;
 }
 
-function getCardClassName(isExcluded: boolean, isLinked: boolean): string {
+function getCardClassName(isExcluded: boolean, isLinked: boolean, isForwarded: boolean, hasAwaitingForwarded: boolean): string {
   if (isExcluded) return 'border-red-100 bg-red-50/20 grayscale';
+  if (isForwarded) return 'border-purple-100 bg-purple-50/20';
+  if (hasAwaitingForwarded) return 'border-amber-100 bg-amber-50/20';
   if (isLinked) return 'border-blue-100 bg-blue-50/20';
   return 'border-slate-100 shadow-sm';
 }
@@ -25,22 +31,31 @@ function getCardClassName(isExcluded: boolean, isLinked: boolean): string {
 export function TransactionCard({
   transaction,
   linkedTransaction,
+  forwardedCcTransactions,
   onEdit,
   onToggleExclude,
   onDelete,
   onViewImage,
   onUnlink,
   onViewLinkedImage,
+  onViewForwardedImage,
+  onUnlinkForwarded,
+  onViewCcImage,
   readonly,
 }: TransactionCardProps) {
   const tx = transaction;
   const typeBadge = getTypeBadge(tx.transactionType);
   const isLinked = !!tx.linkedTransferId;
+  const isForwarded = !!tx.forwardedTransactionId;
+  const hasLinkedCc = forwardedCcTransactions && forwardedCcTransactions.length > 0;
+  const hasAwaitingForwarded = !!tx.forwardedFromApp && !tx.forwardedTransactionId;
   const [linkExpanded, setLinkExpanded] = useState(false);
+  const [forwardedExpanded, setForwardedExpanded] = useState(false);
+  const [forwardedAppExpanded, setForwardedAppExpanded] = useState(false);
 
   return (
     <div
-      className={`bg-white p-5 rounded-[2rem] border transition-all ${getCardClassName(!!tx.isExcluded, isLinked)}`}
+      className={`bg-white p-5 rounded-[2rem] border transition-all ${getCardClassName(!!tx.isExcluded, isLinked, isForwarded, hasAwaitingForwarded)}`}
     >
       <div className="flex flex-col gap-2">
         <div className="flex justify-between items-start">
@@ -58,6 +73,24 @@ export function TransactionCard({
                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-blue-100 text-blue-700">
                   <Link2 size={10} />
                   Matched
+                </span>
+              )}
+              {isForwarded && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-purple-100 text-purple-700">
+                  <CreditCard size={10} />
+                  CC Linked
+                </span>
+              )}
+              {hasLinkedCc && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-purple-100 text-purple-700">
+                  <CreditCard size={10} />
+                  CC Payment
+                </span>
+              )}
+              {hasAwaitingForwarded && (
+                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700">
+                  <AlertCircle size={10} />
+                  Awaiting {tx.forwardedFromApp}
                 </span>
               )}
             </p>
@@ -185,6 +218,136 @@ export function TransactionCard({
                 </p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Expandable Forwarded App Transaction (for CC transactions linked to app) */}
+        {isForwarded && tx.forwardedTransaction && (
+          <div className="mt-2">
+            <button
+              onClick={() => setForwardedAppExpanded(!forwardedAppExpanded)}
+              className="w-full flex items-center justify-between text-xs font-bold p-2 rounded-lg bg-purple-50 text-purple-600 min-h-[36px]"
+            >
+              <div className="flex items-center gap-2">
+                <CreditCard size={12} />
+                <span>Linked to {tx.forwardedTransaction.payment} transaction</span>
+              </div>
+              {forwardedAppExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+
+            {forwardedAppExpanded && (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mt-2 space-y-2 animate-fade-in">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 flex-wrap">
+                      {formatDate(tx.forwardedTransaction.date)}
+                      {tx.forwardedTransaction.transactionType && getTypeBadge(tx.forwardedTransaction.transactionType) && (
+                        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold ${getTypeBadge(tx.forwardedTransaction.transactionType)!.bgColor} ${getTypeBadge(tx.forwardedTransaction.transactionType)!.textColor}`}>
+                          {(() => {
+                            const badge = getTypeBadge(tx.forwardedTransaction.transactionType);
+                            const Icon = badge!.icon;
+                            return <><Icon size={10} />{badge!.label}</>;
+                          })()}
+                        </span>
+                      )}
+                    </p>
+                    <h4 className="font-bold text-slate-700 text-sm mt-1">{tx.forwardedTransaction.expense}</h4>
+                    <p className="text-[10px] text-slate-500">{tx.forwardedTransaction.to}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono font-bold text-slate-700 text-sm">
+                      {formatIDR(tx.forwardedTransaction.total)}
+                    </p>
+                    {tx.forwardedTransaction.imageUrl && onViewForwardedImage && (
+                      <button
+                        onClick={onViewForwardedImage}
+                        className="text-slate-400 hover:text-blue-500 p-1 mt-1"
+                      >
+                        <Image size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-[9px] font-black text-slate-400 bg-white px-1.5 py-0.5 rounded inline-block">
+                  {tx.forwardedTransaction.by} • {tx.forwardedTransaction.payment}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Expandable Forwarded CC Transactions (for app transactions with linked CC) */}
+        {hasLinkedCc && (
+          <div className="mt-2">
+            <button
+              onClick={() => setForwardedExpanded(!forwardedExpanded)}
+              className="w-full flex items-center justify-between text-xs font-bold p-2 rounded-lg bg-purple-50 text-purple-600 min-h-[36px]"
+            >
+              <div className="flex items-center gap-2">
+                <CreditCard size={12} />
+                <span>CC payment linked ({forwardedCcTransactions!.length})</span>
+              </div>
+              {forwardedExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+
+            {forwardedExpanded && (
+              <div className="space-y-2 mt-2">
+                {forwardedCcTransactions!.map((ccTx) => (
+                  <div key={ccTx.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2 animate-fade-in">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 flex-wrap">
+                          {formatDate(ccTx.date)}
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-purple-100 text-purple-700">
+                            <CreditCard size={10} />
+                            CC
+                          </span>
+                        </p>
+                        <h4 className="font-bold text-slate-700 text-sm mt-1">{ccTx.expense}</h4>
+                        <p className="text-[10px] text-slate-500">{ccTx.to}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono font-bold text-slate-700 text-sm">
+                          {formatIDR(ccTx.total)}
+                        </p>
+                        <div className="flex justify-end gap-1">
+                          {ccTx.imageUrl && onViewCcImage && (
+                            <button
+                              onClick={() => onViewCcImage(ccTx.imageUrl!)}
+                              className="text-slate-400 hover:text-blue-500 p-1 mt-1"
+                            >
+                              <Image size={14} />
+                            </button>
+                          )}
+                          {!readonly && onUnlinkForwarded && (
+                            <button
+                              onClick={() => onUnlinkForwarded(ccTx.id)}
+                              className="text-purple-400 hover:text-purple-600 p-1 mt-1"
+                              title="Unlink CC transaction"
+                            >
+                              <Link2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-[9px] font-black text-slate-400 bg-white px-1.5 py-0.5 rounded inline-block">
+                      {ccTx.by} • {ccTx.payment}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Warning for CC transactions awaiting match */}
+        {hasAwaitingForwarded && (
+          <div className="mt-2 p-2 rounded-lg bg-amber-50 border border-amber-200">
+            <div className="flex items-center gap-2 text-xs text-amber-700">
+              <AlertCircle size={14} />
+              <span>This CC transaction awaits {tx.forwardedFromApp} upload to be linked</span>
+            </div>
           </div>
         )}
       </div>
