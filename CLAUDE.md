@@ -89,3 +89,7 @@ npm run lint         # ESLint
 2. Export from `backend/src/common/enums/index.ts`
 3. Mirror in `frontend/src/types/enums.ts`
 4. Use `@IsEnum()` validator in DTOs
+
+### Commenting guide
+1. Avoid unnecessary comment, try to focus on commenting the intention (the why, NOT the what) behind code that are not straight-forward
+2. Do NOT use numbered comment
