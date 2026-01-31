@@ -91,7 +91,7 @@ export function LedgerPage() {
       return nonExcluded
         .filter((t) => !t.linkedTransferId)
         .reduce((sum, t) => {
-          if (t.transactionType === 'income') {
+          if (t.transactionType === 'income' || t.transactionType === 'transfer_in') {
             return sum - t.total; // Subtract income
           }
           return sum + t.total; // Add expenses and unlinked transfers
@@ -101,7 +101,7 @@ export function LedgerPage() {
       return nonExcluded
         .filter((t) =>
           !t.linkedTransferId &&
-          (t.transactionType === 'expense' || !t.transactionType)
+          (t.transactionType === 'expense' || t.transactionType === 'transfer_out' || !t.transactionType)
         )
         .reduce((sum, t) => sum + t.total, 0);
     }

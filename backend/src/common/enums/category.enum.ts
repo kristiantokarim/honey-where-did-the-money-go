@@ -11,4 +11,8 @@ export enum Category {
   UTILITIES = 'Utilities',
   GROCERIES = 'Groceries',
   TOPUP = 'Top-up',
+  HOUSEHOLD = 'Household',
+  ENTERTAINMENT = "Entertainment",
+  GADGET = "GADGET",
+  WIFI = 'WiFi',
 }

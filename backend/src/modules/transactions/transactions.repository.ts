@@ -164,9 +164,9 @@ export class TransactionsRepository {
       .from(transactions)
       .where(
         and(
-          eq(transactions.isExcluded, false),
-          sql`${transactions.linkedTransferId} IS NULL`,
-          eq(transactions.transactionType, 'expense'),
+            sql`${transactions.isExcluded} = false`,
+            sql`${transactions.linkedTransferId} IS NULL`,
+            sql`${transactions.transactionType} IN ('expense', 'transfer_out')`,
           gte(transactions.date, startDate),
           lte(transactions.date, endDate),
         ),

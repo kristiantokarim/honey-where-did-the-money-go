@@ -1,7 +1,9 @@
-import type { GoogleGenAI } from '@google/genai';
 import { Logger } from '@nestjs/common';
 import { IPaymentParser } from '../parser.interface';
+import { IAIProvider } from '../providers/ai-provider.interface';
 import { ParsedTransaction } from '../../../common/dtos/parse-result.dto';
+import { Category } from '../../../common/enums/category.enum';
+import { applyCategoryOverrides } from '../category-overrides';
 
 export abstract class BaseParser implements IPaymentParser {
   protected readonly logger = new Logger(this.constructor.name);
@@ -10,39 +12,27 @@ export abstract class BaseParser implements IPaymentParser {
   abstract canParse(detectedApp: string): boolean;
   abstract getPrompt(): string;
 
-  async parse(client: GoogleGenAI, model: string, imageData: string, mimeType: string): Promise<ParsedTransaction[]> {
+  async parse(
+    provider: IAIProvider,
+    imageData: string,
+    mimeType: string,
+  ): Promise<ParsedTransaction[]> {
     const prompt = this.buildFullPrompt();
-
-    const response = await client.models.generateContent({
-      model,
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: prompt },
-            {
-              inlineData: {
-                data: imageData,
-                mimeType,
-              },
-            },
-          ],
-        },
-      ],
-    });
-
-    const text = response.text || '';
-    return this.extractJson(text);
+    const response = await provider.analyzeImage(prompt, imageData, mimeType);
+    const transactions = this.extractJson(response.text);
+    return applyCategoryOverrides(transactions);
   }
 
   protected buildFullPrompt(): string {
+    const categoryList = Object.values(Category).join('|');
+
     return `${this.getPrompt()}
 
 Return ONLY a JSON array with this exact structure: [{
   "date": "YYYY-MM-DD",
   "expense": "Item Name or Description",
   "to": "Merchant Name (e.g. Gojek, Indomaret)",
-  "category": "Rent|Insurance|Gift|Transport|Meals|Fashion|Healthcare|Trip|Skincare|Utilities|Groceries|Top-up",
+  "category": "${categoryList}",
   "total": number (Absolute value),
   "payment": "${this.appType}",
   "status": "string",
@@ -66,7 +56,15 @@ Transaction Type Detection:
 
   protected extractJson(text: string): ParsedTransaction[] {
     try {
-      const cleaned = text.replace(/```json|```/g, '').trim();
+      // Remove markdown code blocks
+      let cleaned = text.replace(/```json|```/g, '').trim();
+
+      // Find JSON array in the response - Claude might add text before/after
+      const jsonMatch = cleaned.match(/\[[\s\S]*]/);
+      if (jsonMatch) {
+        cleaned = jsonMatch[0];
+      }
+
       const parsed = JSON.parse(cleaned);
 
       return parsed.map((item: any) => ({
@@ -85,6 +83,7 @@ Transaction Type Detection:
       }));
     } catch (error) {
       this.logger.error(`Failed to parse JSON response: ${error.message}`);
+      this.logger.debug(`Raw response: ${text.substring(0, 500)}`);
       throw new Error(`Failed to parse transaction data: ${error.message}`);
     }
   }

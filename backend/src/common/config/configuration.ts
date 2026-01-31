@@ -1,6 +1,8 @@
 export default () => ({
   database: {
-    url: process.env.DATABASE_URL || 'postgresql://exp_track:exp_track_password@localhost:5432/exp_track',
+    url:
+      process.env.DATABASE_URL ||
+      'postgresql://exp_track:exp_track_password@localhost:5432/exp_track',
   },
   minio: {
     endpoint: process.env.MINIO_ENDPOINT || 'localhost',
@@ -12,6 +14,9 @@ export default () => ({
   },
   google: {
     apiKey: process.env.GOOGLE_API_KEY,
+  },
+  ai: {
+    defaultProvider: process.env.AI_PROVIDER || 'gemini',
   },
   cors: {
     origins: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:5173'],

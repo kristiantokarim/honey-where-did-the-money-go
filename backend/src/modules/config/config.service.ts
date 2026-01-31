@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ParserFactory } from '../parser/parser.factory';
+import { Category } from '../../common/enums/category.enum';
 
 export interface AppConfig {
   categories: string[];
@@ -15,20 +16,7 @@ export class ConfigAppService {
   // Later with auth, these will be fetched from database per user/household
   getConfig(): AppConfig {
     return {
-      categories: [
-        'Rent',
-        'Insurance',
-        'Gift',
-        'Transport',
-        'Meals',
-        'Fashion',
-        'Healthcare',
-        'Trip',
-        'Skincare',
-        'Utilities',
-        'Groceries',
-        'Top-up',
-      ],
+      categories: Object.values(Category),
       users: ['Kris', 'Iven'],
       paymentMethods: this.parserFactory.getSupportedApps(),
     };
