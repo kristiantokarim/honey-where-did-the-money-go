@@ -7,10 +7,10 @@ import {
 } from 'react';
 import { transactionService } from '../services/transactions';
 import { useToast } from './ToastContext';
-import type { ParsedTransaction } from '../types';
+import type { ParsedTransaction, Transaction } from '../types';
 import { TransactionType, PaymentApp } from '../types/enums';
 
-type UploadStep = 'idle' | 'uploading' | 'detecting' | 'extracting' | 'checking' | 'complete' | 'error';
+type UploadStep = 'idle' | 'uploading' | 'detecting' | 'extracting' | 'checking' | 'checking_forwarded' | 'checking_reverse' | 'complete' | 'error';
 
 interface UploadProgress {
   step: UploadStep;
@@ -32,6 +32,10 @@ interface UploadContextValue {
   removeResult: (index: number) => void;
   toggleDuplicate: (index: number) => void;
   toggleKeepSeparate: (index: number) => void;
+  selectForwardedMatch: (index: number, matchId: number | null) => void;
+  toggleSkipForwardedMatch: (index: number) => void;
+  selectReverseCcMatch: (index: number, matchId: number | null) => void;
+  toggleSkipReverseCcMatch: (index: number) => void;
 }
 
 const PROGRESS_MESSAGES: Record<UploadStep, string> = {
@@ -40,6 +44,8 @@ const PROGRESS_MESSAGES: Record<UploadStep, string> = {
   detecting: 'Detecting app type...',
   extracting: 'Extracting transactions...',
   checking: 'Checking for duplicates...',
+  checking_forwarded: 'Finding CC matches...',
+  checking_reverse: 'Finding existing CC transactions...',
   complete: 'Done!',
   error: 'Something went wrong',
 };
@@ -93,6 +99,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
               total: t.total,
               to: t.to,
               expense: t.expense,
+              payment: t.payment,
             }))
           ),
           transactionService.checkTransferMatches(
@@ -105,10 +112,53 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           ),
         ]);
 
+        // Step 5: Check for forwarded CC matches (for CC statements looking for source app transactions)
+        const forwardedItems = result.transactions
+          .map((t, idx) => ({ ...t, originalIndex: idx }))
+          .filter((t) => t.forwardedFromApp);
+
+        let forwardedMatches: Array<{ index: number; candidates: Transaction[] }> = [];
+        if (forwardedItems.length > 0) {
+          setStep('checking_forwarded');
+          forwardedMatches = await transactionService.findForwardedMatches(
+            forwardedItems.map((t) => ({
+              forwardedFromApp: t.forwardedFromApp!,
+              total: t.total,
+              date: t.date,
+            }))
+          );
+        }
+
+        // Step 6: Check for reverse forwarded matches (for source apps like Grab/Gojek looking for CC transactions)
+        const isSourceApp = result.appType === PaymentApp.Grab || result.appType === PaymentApp.Gojek;
+        let reverseForwardedMatches: Array<{ index: number; candidates: Transaction[] }> = [];
+
+        if (isSourceApp) {
+          setStep('checking_reverse');
+          reverseForwardedMatches = await transactionService.findReverseForwardedMatches(
+            result.transactions.map((t) => ({
+              payment: t.payment,
+              total: t.total,
+              date: t.date,
+            }))
+          );
+        }
+
         // Process results
         const transactionsWithMeta: ParsedTransaction[] = result.transactions.map(
           (item, idx) => {
             const transferMatch = transferMatches.find((m) => m.index === idx)?.match;
+
+            // Find forwarded match candidates for this transaction
+            const forwardedItemIndex = forwardedItems.findIndex((f) => f.originalIndex === idx);
+            const forwardedMatchData = forwardedItemIndex >= 0
+              ? forwardedMatches.find((m) => m.index === forwardedItemIndex)
+              : undefined;
+            const candidates = forwardedMatchData?.candidates || [];
+
+            // Find reverse CC match candidates (for source apps like Grab/Gojek)
+            const reverseCandidates = reverseForwardedMatches.find((m) => m.index === idx)?.candidates || [];
+
             return {
               ...item,
               by: defaultUser,
@@ -119,6 +169,12 @@ export function UploadProvider({ children }: { children: ReactNode }) {
               transferMatch: transferMatch || undefined,
               matchedTransactionId: transferMatch?.id,
               keepSeparate: false,
+              forwardedMatchCandidates: candidates,
+              forwardedMatch: candidates.length === 1 ? candidates[0] : undefined,
+              skipForwardedMatch: false,
+              reverseCcMatchCandidates: reverseCandidates,
+              reverseCcMatch: reverseCandidates.length === 1 ? reverseCandidates[0] : undefined,
+              skipReverseCcMatch: false,
             };
           }
         );
@@ -182,6 +238,68 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const selectForwardedMatch = useCallback((index: number, matchId: number | null) => {
+    setResults((prev) =>
+      prev.map((tx, i) => {
+        if (i !== index) return tx;
+        const match = matchId
+          ? tx.forwardedMatchCandidates?.find((c) => c.id === matchId)
+          : undefined;
+        return {
+          ...tx,
+          forwardedMatch: match,
+          forwardedTransactionId: match?.id,
+          skipForwardedMatch: false,
+        };
+      })
+    );
+  }, []);
+
+  const toggleSkipForwardedMatch = useCallback((index: number) => {
+    setResults((prev) =>
+      prev.map((tx, i) => {
+        if (i !== index) return tx;
+        const skipForwardedMatch = !tx.skipForwardedMatch;
+        return {
+          ...tx,
+          skipForwardedMatch,
+          forwardedMatch: skipForwardedMatch ? undefined : tx.forwardedMatch,
+          forwardedTransactionId: skipForwardedMatch ? undefined : tx.forwardedMatch?.id,
+        };
+      })
+    );
+  }, []);
+
+  const selectReverseCcMatch = useCallback((index: number, matchId: number | null) => {
+    setResults((prev) =>
+      prev.map((tx, i) => {
+        if (i !== index) return tx;
+        const match = matchId
+          ? tx.reverseCcMatchCandidates?.find((c) => c.id === matchId)
+          : undefined;
+        return {
+          ...tx,
+          reverseCcMatch: match,
+          skipReverseCcMatch: false,
+        };
+      })
+    );
+  }, []);
+
+  const toggleSkipReverseCcMatch = useCallback((index: number) => {
+    setResults((prev) =>
+      prev.map((tx, i) => {
+        if (i !== index) return tx;
+        const skip = !tx.skipReverseCcMatch;
+        return {
+          ...tx,
+          skipReverseCcMatch: skip,
+          reverseCcMatch: skip ? undefined : tx.reverseCcMatch,
+        };
+      })
+    );
+  }, []);
+
   return (
     <UploadContext.Provider
       value={{
@@ -196,6 +314,10 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         removeResult,
         toggleDuplicate,
         toggleKeepSeparate,
+        selectForwardedMatch,
+        toggleSkipForwardedMatch,
+        selectReverseCcMatch,
+        toggleSkipReverseCcMatch,
       }}
     >
       {children}

@@ -19,6 +19,8 @@ export const transactions = pgTable(
     isExcluded: boolean('is_excluded').default(false),
     transactionType: text('transaction_type').default('expense'),
     linkedTransferId: integer('linked_transfer_id'),
+    forwardedTransactionId: integer('forwarded_transaction_id'),
+    forwardedFromApp: text('forwarded_from_app'),
     createdAt: timestamp('created_at').defaultNow(),
   },
   (table) => [

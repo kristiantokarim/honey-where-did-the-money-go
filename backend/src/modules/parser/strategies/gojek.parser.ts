@@ -12,11 +12,13 @@ Look for:
 - Goride/Gocar (transport)
 - Gopay transactions
 - Transaction status: 'Selesai' (completed) vs 'Dibatalkan' (cancelled)
+- Payment method: Look for "GoPay Saldo" (wallet balance) or "xx-XXXX" pattern (credit card)
 
 For each transaction, identify:
 - Date and time
 - Merchant/restaurant name or driver destination
 - Amount paid
-- Service type (Food/Transport)`;
+- Service type (Food/Transport)
+- remarks: Include payment method if visible, e.g. "Paid with CC xx-1394" or "Paid with GoPay Saldo"`;
   }
 }

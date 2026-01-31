@@ -7,5 +7,6 @@ export enum PaymentApp {
   Jenius = 'Jenius',
   Jago = 'Jago',
   Danamon = 'Danamon',
+  Mandiri_CC = 'Mandiri CC',
   Unknown = 'Unknown',
 }

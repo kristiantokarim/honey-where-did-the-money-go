@@ -103,4 +103,35 @@ export const transactionService = {
   unlinkTransfer: async (id: number): Promise<void> => {
     await api.delete(`/transactions/${id}/link`);
   },
+
+  findForwardedMatches: async (
+    items: Array<{ forwardedFromApp: PaymentApp; total: number; date: string }>
+  ): Promise<Array<{ index: number; candidates: Transaction[] }>> => {
+    const response = await api.post<Array<{ index: number; candidates: Transaction[] }>>(
+      '/transactions/find-forwarded-matches',
+      items
+    );
+    return response.data;
+  },
+
+  linkForwarded: async (ccTransactionId: number, appTransactionId: number): Promise<void> => {
+    await api.post('/transactions/link-forwarded', {
+      ccTransactionId,
+      appTransactionId,
+    });
+  },
+
+  unlinkForwarded: async (id: number): Promise<void> => {
+    await api.delete(`/transactions/${id}/forwarded-link`);
+  },
+
+  findReverseForwardedMatches: async (
+    items: Array<{ payment: PaymentApp; total: number; date: string }>
+  ): Promise<Array<{ index: number; candidates: Transaction[] }>> => {
+    const response = await api.post<Array<{ index: number; candidates: Transaction[] }>>(
+      '/transactions/find-reverse-forwarded-matches',
+      items
+    );
+    return response.data;
+  },
 };

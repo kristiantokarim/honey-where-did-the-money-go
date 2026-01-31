@@ -5,7 +5,7 @@ NestJS backend for parsing receipt images and tracking expenses.
 ## Features
 
 - Receipt image parsing via AI (Gemini or Claude Code CLI)
-- Multi-app support: Gojek, OVO, BCA, Grab, Dana, Jenius, Jago, Danamon
+- Multi-app support: Gojek, OVO, BCA, Grab, Dana, Jenius, Jago, Danamon, Mandiri CC
 - Automatic category detection with merchant-based overrides
 - MinIO storage for receipt images
 - PostgreSQL database with Drizzle ORM
@@ -71,6 +71,25 @@ Merchant-based rules override AI categorization:
 
 Edit `src/modules/parser/category-overrides.ts` to add more rules.
 
+## CC Forwarding Feature
+
+When paying via Grab/Gojek using a credit card, two transactions are recorded:
+1. The app transaction (Grab/Gojek) showing the purchase
+2. The CC statement showing the charge
+
+This creates duplicate expenses in totals. The CC forwarding feature links these transactions:
+
+- **On upload**: CC transactions from Mandiri CC are parsed with `forwardedFromApp` field (e.g., "Grab", "Gojek")
+- **Matching**: System finds potential app transactions to link based on amount and date
+- **Linking**: When linked, the CC transaction is excluded from expense totals
+- **Category sync**: Linked transactions share the same category - updating one updates the other
+
+### Supported CC Forwarding
+
+| CC Source | Detected Apps |
+|-----------|---------------|
+| Mandiri CC | Grab, Gojek |
+
 ## API Endpoints
 
 ### Transactions
@@ -80,6 +99,10 @@ Edit `src/modules/parser/category-overrides.ts` to add more rules.
 - `GET /transactions/history` - Get transaction history
 - `PUT /transactions/:id` - Update transaction
 - `DELETE /transactions/:id` - Delete transaction
+- `POST /transactions/link-forwarded` - Link CC transaction to app transaction
+- `DELETE /transactions/:id/unlink-forwarded` - Unlink CC transaction from app
+- `POST /transactions/check-forwarded-matches` - Find potential CC-to-app matches
+- `POST /transactions/check-reverse-forwarded-matches` - Find existing CC transactions for app upload
 
 ### Config
 

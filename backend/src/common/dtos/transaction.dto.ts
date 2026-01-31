@@ -61,6 +61,14 @@ export class CreateTransactionDto {
   @IsNumber()
   @IsOptional()
   matchedTransactionId?: number;
+
+  @IsNumber()
+  @IsOptional()
+  forwardedTransactionId?: number;
+
+  @IsEnum(PaymentApp)
+  @IsOptional()
+  forwardedFromApp?: PaymentApp;
 }
 
 export class UpdateTransactionDto extends PartialType(
@@ -105,6 +113,9 @@ export class DuplicateCheckItemDto {
   @IsString()
   @IsOptional()
   expense?: string;
+
+  @IsEnum(PaymentApp)
+  payment: PaymentApp;
 }
 
 export class CheckTransferMatchDto {
@@ -139,4 +150,38 @@ export class LedgerTotalQueryDto {
   @IsString()
   @IsOptional()
   by?: string;
+}
+
+export class FindForwardedMatchItemDto {
+  @IsEnum(PaymentApp)
+  forwardedFromApp: PaymentApp;
+
+  @IsNumber()
+  @Type(() => Number)
+  total: number;
+
+  @IsString()
+  date: string;
+}
+
+export class LinkForwardedDto {
+  @IsNumber()
+  @Type(() => Number)
+  ccTransactionId: number;
+
+  @IsNumber()
+  @Type(() => Number)
+  appTransactionId: number;
+}
+
+export class CheckReverseForwardedMatchDto {
+  @IsEnum(PaymentApp)
+  payment: PaymentApp;
+
+  @IsNumber()
+  @Type(() => Number)
+  total: number;
+
+  @IsString()
+  date: string;
 }

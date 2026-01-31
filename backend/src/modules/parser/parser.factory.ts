@@ -9,6 +9,7 @@ import {
   JeniusParser,
   JagoParser,
   DanamonParser,
+  MandiriCCParser,
   DefaultParser,
 } from './strategies';
 import { PaymentApp } from '../../common/enums';
@@ -28,6 +29,7 @@ export class ParserFactory {
       new JeniusParser(),
       new JagoParser(),
       new DanamonParser(),
+      new MandiriCCParser(),
       new DefaultParser(), // Always last as fallback
     ];
   }

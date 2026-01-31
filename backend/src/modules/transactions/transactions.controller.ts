@@ -21,6 +21,9 @@ import {
   DuplicateCheckItemDto,
   CheckTransferMatchDto,
   LedgerTotalQueryDto,
+  FindForwardedMatchItemDto,
+  LinkForwardedDto,
+  CheckReverseForwardedMatchDto,
 } from '../../common/dtos/transaction.dto';
 import { PaymentApp } from '../../common/enums';
 
@@ -94,5 +97,30 @@ export class TransactionsController {
   async unlinkTransfer(@Param('id', ParseIntPipe) id: number) {
     await this.transactionsService.unlinkTransfer(id);
     return { success: true };
+  }
+
+  @Post('find-forwarded-matches')
+  async findForwardedMatches(@Body() payload: FindForwardedMatchItemDto[]) {
+    return this.transactionsService.findForwardedMatches(payload);
+  }
+
+  @Post('link-forwarded')
+  async linkForwarded(@Body() payload: LinkForwardedDto) {
+    await this.transactionsService.linkForwarded(
+      payload.ccTransactionId,
+      payload.appTransactionId,
+    );
+    return { success: true };
+  }
+
+  @Delete(':id/forwarded-link')
+  async unlinkForwarded(@Param('id', ParseIntPipe) id: number) {
+    await this.transactionsService.unlinkForwarded(id);
+    return { success: true };
+  }
+
+  @Post('find-reverse-forwarded-matches')
+  async findReverseForwardedMatches(@Body() payload: CheckReverseForwardedMatchDto[]) {
+    return this.transactionsService.findReverseForwardedMatches(payload);
   }
 }

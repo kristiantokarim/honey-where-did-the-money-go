@@ -28,6 +28,10 @@ export function ScanPage() {
     removeResult,
     toggleDuplicate,
     toggleKeepSeparate,
+    selectForwardedMatch,
+    toggleSkipForwardedMatch,
+    selectReverseCcMatch,
+    toggleSkipReverseCcMatch,
   } = useUpload();
 
   const [selectedApp, setSelectedApp] = useState('auto');
@@ -75,7 +79,48 @@ export function ScanPage() {
 
     try {
       setSaving(true);
+
+      // Save all transactions
       await transactionService.confirm(itemsToSave);
+
+      // Link reverse CC matches (CC transactions that need to point to newly saved app transactions)
+      // We need to fetch the newly saved transactions to get their IDs
+      // For now, we'll re-link using the CC transaction IDs and the app transaction info
+      const reverseCcLinks = itemsToSave
+        .map((item, idx) => ({ item, originalIdx: results.findIndex(r => r === item) }))
+        .filter(({ item }) => item.reverseCcMatch && !item.skipReverseCcMatch);
+
+      if (reverseCcLinks.length > 0) {
+        // Fetch recently saved transactions to find the newly created IDs
+        const today = new Date();
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const recentTransactions = await transactionService.getHistory(
+          thirtyDaysAgo.toISOString().split('T')[0],
+          today.toISOString().split('T')[0]
+        );
+
+        // Match saved items with their new IDs by finding exact matches
+        for (const { item } of reverseCcLinks) {
+          const savedTransaction = recentTransactions.find(
+            (t) =>
+              t.date === item.date &&
+              t.total === item.total &&
+              t.expense === item.expense &&
+              t.to === item.to &&
+              t.payment === item.payment
+          );
+
+          if (savedTransaction && item.reverseCcMatch) {
+            try {
+              await transactionService.linkForwarded(item.reverseCcMatch.id, savedTransaction.id);
+            } catch (linkError) {
+              console.error('Failed to link CC transaction:', linkError);
+            }
+          }
+        }
+      }
+
       showToast(`Saved ${itemsToSave.length} transaction(s)`, 'success');
       clearResults();
       navigate({ to: '/ledger' });
@@ -116,6 +161,10 @@ export function ScanPage() {
           onRemove={setRemovingIndex}
           onToggleDuplicate={toggleDuplicate}
           onToggleKeepSeparate={toggleKeepSeparate}
+          onSelectForwardedMatch={selectForwardedMatch}
+          onToggleSkipForwardedMatch={toggleSkipForwardedMatch}
+          onSelectReverseCcMatch={selectReverseCcMatch}
+          onToggleSkipReverseCcMatch={toggleSkipReverseCcMatch}
           onViewImage={(url) => {
             setMatchImageUrl(url);
             setMatchImageZoomed(true);

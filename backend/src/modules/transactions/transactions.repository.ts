@@ -83,24 +83,30 @@ export class TransactionsRepository {
   }
 
   async checkDuplicates(
-    items: Array<{ date: string; total: number; to: string; expense?: string }>,
+    items: Array<{ date: string; total: number; to: string; expense?: string; payment: PaymentApp }>,
   ): Promise<Array<{ exists: boolean; matchedId?: number }>> {
     this.logger.debug(`Checking duplicates for ${items.length} items`);
 
     return await Promise.all(
       items.map(async (item) => {
         this.logger.debug(
-          `Checking: date=${item.date}, total=${item.total}, to=${item.to}, expense=${item.expense}`,
+          `Checking: date=${item.date}, total=${item.total}, to=${item.to}, expense=${item.expense}, payment=${item.payment}`,
         );
 
-        // First, find candidates with same date and total (exact match required)
+        // Find candidates with same date, total, and payment app (duplicates only happen within same app)
         const candidates = await this.db
           .select()
           .from(transactions)
-          .where(and(eq(transactions.date, item.date), eq(transactions.total, item.total)));
+          .where(
+            and(
+              eq(transactions.date, item.date),
+              eq(transactions.total, item.total),
+              eq(transactions.payment, item.payment),
+            ),
+          );
 
         if (candidates.length === 0) {
-          this.logger.debug('No candidates found with same date and total');
+          this.logger.debug('No candidates found with same date, total, and payment app');
           return { exists: false };
         }
 
@@ -167,6 +173,7 @@ export class TransactionsRepository {
         and(
           sql`${transactions.isExcluded} = false`,
           sql`${transactions.linkedTransferId} IS NULL`,
+          sql`${transactions.forwardedTransactionId} IS NULL`,
           inArray(transactions.transactionType, [...EXPENSE_TYPES]),
           gte(transactions.date, startDate),
           lte(transactions.date, endDate),
@@ -196,6 +203,7 @@ export class TransactionsRepository {
     const conditions = [
       sql`${transactions.isExcluded} = false`,
       sql`${transactions.linkedTransferId} IS NULL`,
+      sql`${transactions.forwardedTransactionId} IS NULL`,
       gte(transactions.date, startDate),
       lte(transactions.date, endDate),
     ];
@@ -307,5 +315,113 @@ export class TransactionsRepository {
       .update(transactions)
       .set({ linkedTransferId: null })
       .where(inArray(transactions.id, [id, transaction.linkedTransferId]));
+  }
+
+  async findForwardedMatchCandidates(
+    items: Array<{ forwardedFromApp: PaymentApp; total: number; date: string }>,
+  ): Promise<Array<{ index: number; candidates: Transaction[] }>> {
+    return await Promise.all(
+      items.map(async (item, index) => {
+        // Parse the date to check ±2 days
+        const itemDate = new Date(item.date);
+        const daysBefore = new Date(itemDate);
+        daysBefore.setDate(daysBefore.getDate() - 2);
+        const daysAfter = new Date(itemDate);
+        daysAfter.setDate(daysAfter.getDate() + 2);
+
+        const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+        // Find candidates: same app, same amount, within ±2 days, not already linked as forwarded
+        const candidates = await this.db
+          .select()
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.payment, item.forwardedFromApp),
+              eq(transactions.total, item.total),
+              gte(transactions.date, formatDate(daysBefore)),
+              lte(transactions.date, formatDate(daysAfter)),
+            ),
+          );
+
+        // Filter out transactions that are already linked as the source of another forwarded transaction
+        const linkedAsForwardedIds = await this.db
+          .select({ forwardedTransactionId: transactions.forwardedTransactionId })
+          .from(transactions)
+          .where(sql`${transactions.forwardedTransactionId} IS NOT NULL`);
+
+        const linkedIds = new Set(
+          linkedAsForwardedIds.map((t) => t.forwardedTransactionId),
+        );
+
+        const filteredCandidates = candidates.filter((c) => !linkedIds.has(c.id));
+
+        // For Gojek transactions, filter to only CC-paid ones (those with "xx-XXXX" in remarks)
+        const filteredByPaymentMethod =
+          item.forwardedFromApp === PaymentApp.Gojek
+            ? filteredCandidates.filter((c) => c.remarks && /xx-\d{4}/i.test(c.remarks))
+            : filteredCandidates;
+
+        return { index, candidates: filteredByPaymentMethod };
+      }),
+    );
+  }
+
+  async linkForwarded(ccTransactionId: number, appTransactionId: number): Promise<void> {
+    await this.db
+      .update(transactions)
+      .set({ forwardedTransactionId: appTransactionId })
+      .where(eq(transactions.id, ccTransactionId));
+  }
+
+  async unlinkForwarded(id: number): Promise<void> {
+    await this.db
+      .update(transactions)
+      .set({ forwardedTransactionId: null })
+      .where(eq(transactions.id, id));
+  }
+
+  async findTransactionsWithForwardedLink(ids: number[]): Promise<Transaction[]> {
+    if (ids.length === 0) return [];
+    return await this.db
+      .select()
+      .from(transactions)
+      .where(inArray(transactions.forwardedTransactionId, ids));
+  }
+
+  async findReverseForwardedMatchCandidates(
+    items: Array<{ payment: PaymentApp; total: number; date: string }>,
+  ): Promise<Array<{ index: number; candidates: Transaction[] }>> {
+    return await Promise.all(
+      items.map(async (item, index) => {
+        const itemDate = new Date(item.date);
+        const daysBefore = new Date(itemDate);
+        daysBefore.setDate(daysBefore.getDate() - 2);
+        const daysAfter = new Date(itemDate);
+        daysAfter.setDate(daysAfter.getDate() + 2);
+
+        const formatDate = (d: Date) => d.toISOString().split('T')[0];
+
+        // Find CC transactions that:
+        // - Have forwardedFromApp === this app (e.g., Grab)
+        // - Have same total amount
+        // - Are within ±2 days
+        // - Don't already have forwardedTransactionId set (not yet linked)
+        const candidates = await this.db
+          .select()
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.forwardedFromApp, item.payment),
+              eq(transactions.total, item.total),
+              gte(transactions.date, formatDate(daysBefore)),
+              lte(transactions.date, formatDate(daysAfter)),
+              sql`${transactions.forwardedTransactionId} IS NULL`,
+            ),
+          );
+
+        return { index, candidates };
+      }),
+    );
   }
 }

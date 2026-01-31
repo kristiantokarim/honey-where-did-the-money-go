@@ -15,6 +15,7 @@ export interface ParsedTransaction {
   status: string;
   isValid: boolean;
   transactionType: TransactionType;
+  forwardedFromApp?: PaymentApp;
 }
 
 export interface ParseResult {

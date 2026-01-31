@@ -7,4 +7,5 @@ export * from './dana.parser';
 export * from './jenius.parser';
 export * from './jago.parser';
 export * from './danamon.parser';
+export * from './mandiri-cc.parser';
 export * from './default.parser';

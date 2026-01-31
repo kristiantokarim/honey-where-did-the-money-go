@@ -19,6 +19,10 @@ export interface Transaction {
   transactionType: TransactionType;
   linkedTransferId?: number;
   linkedTransaction?: Transaction;
+  forwardedTransactionId?: number;
+  forwardedFromApp?: PaymentApp;
+  forwardedTransaction?: Transaction;
+  forwardedCcTransactions?: Transaction[];
 }
 
 export interface ParsedTransaction extends Omit<Transaction, 'id'> {
@@ -28,6 +32,12 @@ export interface ParsedTransaction extends Omit<Transaction, 'id'> {
   transferMatch?: Transaction;
   keepSeparate: boolean;
   matchedTransactionId?: number;
+  forwardedMatch?: Transaction;
+  forwardedMatchCandidates?: Transaction[];
+  skipForwardedMatch?: boolean;
+  reverseCcMatch?: Transaction;
+  reverseCcMatchCandidates?: Transaction[];
+  skipReverseCcMatch?: boolean;
 }
 
 export interface DashboardItem {

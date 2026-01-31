@@ -5,7 +5,7 @@ import { StorageService } from '../storage/storage.service';
 import { CreateTransactionDto, UpdateTransactionDto, DateRangeQueryDto, LedgerTotalQueryDto } from '../../common/dtos/transaction.dto';
 import { ParsedTransaction } from '../../common/dtos/parse-result.dto';
 import { Transaction, NewTransaction } from '../../database/schema';
-import { PaymentApp, TransactionType } from '../../common/enums';
+import { Category, PaymentApp, TransactionType } from '../../common/enums';
 
 @Injectable()
 export class TransactionsService {
@@ -49,7 +49,7 @@ export class TransactionsService {
   }
 
   async checkDuplicates(
-    items: Array<{ date: string; total: number; to: string; expense?: string }>,
+    items: Array<{ date: string; total: number; to: string; expense?: string; payment: PaymentApp }>,
   ): Promise<Array<{ exists: boolean; matchedId?: number }>> {
     return this.repository.checkDuplicates(items);
   }
@@ -64,11 +64,13 @@ export class TransactionsService {
     items: CreateTransactionDto[],
   ): Promise<{ success: boolean; count: number }> {
     const transactionsToInsert: NewTransaction[] = items.map((item) => {
-      const { matchedTransactionId, ...rest } = item;
+      const { matchedTransactionId, forwardedTransactionId, ...rest } = item;
       return {
         ...rest,
         price: item.total, // Sync price with total
         quantity: item.quantity || 1,
+        // Include forwardedTransactionId directly when saving
+        forwardedTransactionId: forwardedTransactionId,
       };
     });
 
@@ -88,27 +90,53 @@ export class TransactionsService {
 
   async getHistory(
     query: DateRangeQueryDto,
-  ): Promise<Array<Transaction & { linkedTransaction?: Transaction }>> {
+  ): Promise<Array<Transaction & { linkedTransaction?: Transaction; forwardedTransaction?: Transaction; forwardedCcTransactions?: Transaction[] }>> {
     const { startDate, endDate, category, by, sortBy } = query;
     const transactions = await this.repository.findByDateRange(startDate, endDate, category, by, sortBy);
 
-    // Collect all linked transaction IDs that need to be fetched
+    // Collect all linked transfer IDs that need to be fetched
     const linkedIds = transactions
       .filter((t) => t.linkedTransferId)
       .map((t) => t.linkedTransferId as number);
 
-    if (linkedIds.length === 0) {
-      return transactions;
-    }
+    // Collect all forwarded transaction IDs that need to be fetched
+    const forwardedIds = transactions
+      .filter((t) => t.forwardedTransactionId)
+      .map((t) => t.forwardedTransactionId as number);
 
-    // Fetch all linked transactions in one query
-    const linkedTransactions = await this.repository.findByIds(linkedIds);
-    const linkedMap = new Map(linkedTransactions.map((t) => [t.id, t]));
+    // Collect IDs of transactions that might have CC transactions linked to them
+    const transactionIds = transactions.map((t) => t.id);
+
+    // Fetch all linked and forwarded transactions in parallel
+    const [linkedTransactions, forwardedTransactions, ccTransactions] = await Promise.all([
+      linkedIds.length > 0 ? this.repository.findByIds(linkedIds) : [],
+      forwardedIds.length > 0 ? this.repository.findByIds(forwardedIds) : [],
+      transactionIds.length > 0 ? this.repository.findTransactionsWithForwardedLink(transactionIds) : [],
+    ]);
+
+    const linkedMap = new Map<number, Transaction>(
+      linkedTransactions.map((t): [number, Transaction] => [t.id, t])
+    );
+    const forwardedMap = new Map<number, Transaction>(
+      forwardedTransactions.map((t): [number, Transaction] => [t.id, t])
+    );
+
+    // Group CC transactions by their forwarded source
+    const ccTransactionsBySource = new Map<number, Transaction[]>();
+    for (const cc of ccTransactions) {
+      if (cc.forwardedTransactionId) {
+        const existing = ccTransactionsBySource.get(cc.forwardedTransactionId) || [];
+        existing.push(cc);
+        ccTransactionsBySource.set(cc.forwardedTransactionId, existing);
+      }
+    }
 
     // Enrich transactions with their linked counterparts
     return transactions.map((t) => ({
       ...t,
       linkedTransaction: t.linkedTransferId ? linkedMap.get(t.linkedTransferId) : undefined,
+      forwardedTransaction: t.forwardedTransactionId ? forwardedMap.get(t.forwardedTransactionId) : undefined,
+      forwardedCcTransactions: ccTransactionsBySource.get(t.id),
     }));
   }
 
@@ -140,7 +168,30 @@ export class TransactionsService {
       throw new BadRequestException('Failed to update transaction');
     }
 
+    // Sync category to linked forwarded transactions
+    if (data.category !== undefined) {
+      await this.syncForwardedCategory(id, data.category);
+    }
+
     return result;
+  }
+
+  private async syncForwardedCategory(transactionId: number, category: Category): Promise<void> {
+    const transaction = await this.repository.findById(transactionId);
+    if (!transaction) return;
+
+    // If this is a CC transaction linked to an app transaction, update the app transaction
+    if (transaction.forwardedTransactionId) {
+      await this.repository.update(transaction.forwardedTransactionId, { category });
+      this.logger.log(`Synced category to app transaction ${transaction.forwardedTransactionId}`);
+    }
+
+    // If this is an app transaction with linked CC transactions, update them all
+    const linkedCcTransactions = await this.repository.findTransactionsWithForwardedLink([transactionId]);
+    for (const ccTx of linkedCcTransactions) {
+      await this.repository.update(ccTx.id, { category });
+      this.logger.log(`Synced category to CC transaction ${ccTx.id}`);
+    }
   }
 
   async delete(id: number): Promise<void> {
@@ -163,5 +214,43 @@ export class TransactionsService {
 
     await this.repository.unlinkTransfer(id);
     this.logger.log(`Unlinked transaction ${id} from ${existing.linkedTransferId}`);
+  }
+
+  async findForwardedMatches(
+    items: Array<{ forwardedFromApp: PaymentApp; total: number; date: string }>,
+  ): Promise<Array<{ index: number; candidates: Transaction[] }>> {
+    return this.repository.findForwardedMatchCandidates(items);
+  }
+
+  async linkForwarded(ccTransactionId: number, appTransactionId: number): Promise<void> {
+    const ccTransaction = await this.findByIdOrThrow(ccTransactionId);
+    const appTransaction = await this.findByIdOrThrow(appTransactionId);
+
+    if (ccTransaction.forwardedTransactionId) {
+      throw new BadRequestException('CC transaction is already linked to another transaction');
+    }
+
+    // Link and sync category from app to CC
+    await this.repository.linkForwarded(ccTransactionId, appTransactionId);
+    await this.repository.update(ccTransactionId, { category: appTransaction.category });
+
+    this.logger.log(`Linked CC transaction ${ccTransactionId} to app transaction ${appTransactionId}, synced category`);
+  }
+
+  async unlinkForwarded(id: number): Promise<void> {
+    const existing = await this.findByIdOrThrow(id);
+
+    if (!existing.forwardedTransactionId) {
+      throw new BadRequestException('Transaction is not linked as forwarded');
+    }
+
+    await this.repository.unlinkForwarded(id);
+    this.logger.log(`Unlinked forwarded transaction ${id} from ${existing.forwardedTransactionId}`);
+  }
+
+  async findReverseForwardedMatches(
+    items: Array<{ payment: PaymentApp; total: number; date: string }>,
+  ): Promise<Array<{ index: number; candidates: Transaction[] }>> {
+    return this.repository.findReverseForwardedMatchCandidates(items);
   }
 }
