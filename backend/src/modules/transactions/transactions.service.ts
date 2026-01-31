@@ -7,6 +7,22 @@ import { ParsedTransaction } from '../../common/dtos/parse-result.dto';
 import { Transaction, NewTransaction } from '../../database/schema';
 import { Category, PaymentApp, TransactionType } from '../../common/enums';
 
+interface RawParsedTransaction {
+  date: string;
+  category: Category;
+  expense: string;
+  price: number;
+  quantity: number;
+  total: number;
+  payment: PaymentApp;
+  to: string;
+  remarks?: string;
+  status: string;
+  isValid: boolean;
+  transactionType: TransactionType;
+  forwardedFromApp?: PaymentApp;
+}
+
 @Injectable()
 export class TransactionsService {
   private readonly logger = new Logger(TransactionsService.name);
@@ -42,50 +58,120 @@ export class TransactionsService {
     // Parse the image (pass appType to skip AI detection if provided)
     const result = await this.parserService.parseImage(file, mimeType, appType);
 
+    // Enrich transactions with match info
+    const enriched = await this.enrichTransactions(result.transactions, result.appType);
+
     return {
-      ...result,
+      appType: result.appType,
+      transactions: enriched,
       imageUrl,
     };
   }
 
-  async checkDuplicates(
-    items: Array<{ date: string; total: number; to: string; expense?: string; payment: PaymentApp }>,
-  ): Promise<Array<{ exists: boolean; matchedId?: number }>> {
-    return this.repository.checkDuplicates(items);
-  }
+  private async enrichTransactions(
+    rawTransactions: RawParsedTransaction[],
+    appType: PaymentApp,
+  ): Promise<ParsedTransaction[]> {
+    // Prepare data for parallel checks
+    const duplicateCheckItems = rawTransactions.map(t => ({
+      date: t.date,
+      total: t.total,
+      to: t.to,
+      expense: t.expense,
+      payment: t.payment,
+    }));
 
-  async checkTransferMatches(
-    items: Array<{ transactionType: TransactionType; total: number; date: string; payment: PaymentApp }>,
-  ): Promise<Array<{ index: number; match: Transaction | null }>> {
-    return this.repository.findPotentialTransferMatches(items);
+    const transferCheckItems = rawTransactions.map(t => ({
+      transactionType: t.transactionType,
+      total: t.total,
+      date: t.date,
+      payment: t.payment,
+    }));
+
+    // Items that have forwardedFromApp (CC transactions looking for app transactions)
+    const forwardedItems = rawTransactions
+      .map((t, idx) => ({ ...t, originalIndex: idx }))
+      .filter(t => t.forwardedFromApp);
+
+    const forwardedCheckItems = forwardedItems.map(t => ({
+      forwardedFromApp: t.forwardedFromApp!,
+      total: t.total,
+      date: t.date,
+    }));
+
+    // Check if this is a source app (Grab/Gojek) that needs reverse CC matching
+    const isSourceApp = appType === PaymentApp.Grab || appType === PaymentApp.Gojek;
+    const reverseCcCheckItems = isSourceApp
+      ? rawTransactions.map(t => ({
+          payment: t.payment,
+          total: t.total,
+          date: t.date,
+        }))
+      : [];
+
+    // Run all checks in parallel
+    const [duplicates, transferMatches, forwardedMatches, reverseCcMatches] = await Promise.all([
+      this.repository.checkDuplicates(duplicateCheckItems),
+      this.repository.findPotentialTransferMatches(transferCheckItems),
+      forwardedCheckItems.length > 0
+        ? this.repository.findForwardedMatchCandidates(forwardedCheckItems)
+        : [],
+      reverseCcCheckItems.length > 0
+        ? this.repository.findReverseForwardedMatchCandidates(reverseCcCheckItems)
+        : [],
+    ]);
+
+    // Build a map from forwardedItems index to candidates
+    const forwardedMatchMap = new Map<number, Transaction[]>();
+    for (const match of forwardedMatches) {
+      const originalIndex = forwardedItems[match.index]?.originalIndex;
+      if (originalIndex !== undefined) {
+        forwardedMatchMap.set(originalIndex, match.candidates);
+      }
+    }
+
+    return rawTransactions.map((t, idx): ParsedTransaction => ({
+      ...t,
+      isDuplicate: duplicates[idx].exists,
+      duplicateMatchedId: duplicates[idx].matchedId,
+      transferMatch: transferMatches.find(m => m.index === idx)?.match ?? null,
+      forwardedMatchCandidates: forwardedMatchMap.get(idx) ?? [],
+      reverseCcMatchCandidates: isSourceApp
+        ? (reverseCcMatches.find(m => m.index === idx)?.candidates ?? [])
+        : [],
+    }));
   }
 
   async confirmTransactions(
     items: CreateTransactionDto[],
-  ): Promise<{ success: boolean; count: number }> {
+  ): Promise<{ success: boolean; count: number; createdIds: number[] }> {
+    // Prepare transactions for insert
     const transactionsToInsert: NewTransaction[] = items.map((item) => {
-      const { matchedTransactionId, forwardedTransactionId, ...rest } = item;
+      const { matchedTransactionId, forwardedTransactionId, reverseCcMatchId, ...rest } = item;
       return {
         ...rest,
         price: item.total, // Sync price with total
         quantity: item.quantity || 1,
-        // Include forwardedTransactionId directly when saving
+        // Include forwardedTransactionId directly when saving (for CC→App linking set at scan time)
         forwardedTransactionId: forwardedTransactionId,
       };
     });
 
-    const result = await this.repository.createMany(transactionsToInsert);
-    this.logger.log(`Confirmed ${result.length} transactions`);
+    // Prepare link instructions
+    const links = items.map((item, index) => ({
+      index,
+      matchedTransactionId: item.matchedTransactionId,
+      reverseCcMatchId: item.reverseCcMatchId,
+    }));
 
-    // Link transfers if matchedTransactionId was provided
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].matchedTransactionId && result[i]) {
-        await this.repository.linkTransfers(result[i].id, items[i].matchedTransactionId);
-        this.logger.log(`Linked transaction ${result[i].id} with ${items[i].matchedTransactionId}`);
-      }
-    }
+    // Execute transactionally in repository
+    const { created, createdIds } = await this.repository.createManyWithLinks(
+      transactionsToInsert,
+      links,
+    );
 
-    return { success: true, count: result.length };
+    this.logger.log(`Confirmed ${created.length} transactions with links`);
+    return { success: true, count: created.length, createdIds };
   }
 
   async getHistory(
@@ -216,12 +302,6 @@ export class TransactionsService {
     this.logger.log(`Unlinked transaction ${id} from ${existing.linkedTransferId}`);
   }
 
-  async findForwardedMatches(
-    items: Array<{ forwardedFromApp: PaymentApp; total: number; date: string }>,
-  ): Promise<Array<{ index: number; candidates: Transaction[] }>> {
-    return this.repository.findForwardedMatchCandidates(items);
-  }
-
   async linkForwarded(ccTransactionId: number, appTransactionId: number): Promise<void> {
     const ccTransaction = await this.findByIdOrThrow(ccTransactionId);
     const appTransaction = await this.findByIdOrThrow(appTransactionId);
@@ -246,11 +326,5 @@ export class TransactionsService {
 
     await this.repository.unlinkForwarded(id);
     this.logger.log(`Unlinked forwarded transaction ${id} from ${existing.forwardedTransactionId}`);
-  }
-
-  async findReverseForwardedMatches(
-    items: Array<{ payment: PaymentApp; total: number; date: string }>,
-  ): Promise<Array<{ index: number; candidates: Transaction[] }>> {
-    return this.repository.findReverseForwardedMatchCandidates(items);
   }
 }

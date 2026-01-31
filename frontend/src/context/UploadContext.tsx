@@ -7,10 +7,10 @@ import {
 } from 'react';
 import { transactionService } from '../services/transactions';
 import { useToast } from './ToastContext';
-import type { ParsedTransaction, Transaction } from '../types';
-import { TransactionType, PaymentApp } from '../types/enums';
+import type { ParsedTransaction } from '../types';
+import { PaymentApp } from '../types/enums';
 
-type UploadStep = 'idle' | 'uploading' | 'detecting' | 'extracting' | 'checking' | 'checking_forwarded' | 'checking_reverse' | 'complete' | 'error';
+type UploadStep = 'idle' | 'uploading' | 'extracting' | 'review' | 'error';
 
 interface UploadProgress {
   step: UploadStep;
@@ -41,12 +41,8 @@ interface UploadContextValue {
 const PROGRESS_MESSAGES: Record<UploadStep, string> = {
   idle: '',
   uploading: 'Uploading image...',
-  detecting: 'Detecting app type...',
   extracting: 'Extracting transactions...',
-  checking: 'Checking for duplicates...',
-  checking_forwarded: 'Finding CC matches...',
-  checking_reverse: 'Finding existing CC transactions...',
-  complete: 'Done!',
+  review: 'Done!',
   error: 'Something went wrong',
 };
 
@@ -59,7 +55,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const isUploading = ['uploading', 'detecting', 'extracting', 'checking'].includes(step);
+  const isUploading = ['uploading', 'extracting'].includes(step);
 
   const progress: UploadProgress = {
     step,
@@ -80,98 +76,34 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       setResults([]);
 
       try {
-        // Step 1: Upload
         setStep('uploading');
-
-        // Step 2: Detecting (part of upload API call)
-        setStep('detecting');
-
-        // Step 3: Extracting
         setStep('extracting');
+
+        // Single API call - backend returns fully enriched transactions
         const result = await transactionService.upload(file, appType);
 
-        // Step 4: Check duplicates and transfer matches
-        setStep('checking');
-        const [duplicateCheck, transferMatches] = await Promise.all([
-          transactionService.checkDuplicates(
-            result.transactions.map((t) => ({
-              date: t.date,
-              total: t.total,
-              to: t.to,
-              expense: t.expense,
-              payment: t.payment,
-            }))
-          ),
-          transactionService.checkTransferMatches(
-            result.transactions.map((t) => ({
-              transactionType: t.transactionType,
-              total: t.total,
-              date: t.date,
-              payment: t.payment,
-            }))
-          ),
-        ]);
-
-        // Step 5: Check for forwarded CC matches (for CC statements looking for source app transactions)
-        const forwardedItems = result.transactions
-          .map((t, idx) => ({ ...t, originalIndex: idx }))
-          .filter((t) => t.forwardedFromApp);
-
-        let forwardedMatches: Array<{ index: number; candidates: Transaction[] }> = [];
-        if (forwardedItems.length > 0) {
-          setStep('checking_forwarded');
-          forwardedMatches = await transactionService.findForwardedMatches(
-            forwardedItems.map((t) => ({
-              forwardedFromApp: t.forwardedFromApp!,
-              total: t.total,
-              date: t.date,
-            }))
-          );
-        }
-
-        // Step 6: Check for reverse forwarded matches (for source apps like Grab/Gojek looking for CC transactions)
-        const isSourceApp = result.appType === PaymentApp.Grab || result.appType === PaymentApp.Gojek;
-        let reverseForwardedMatches: Array<{ index: number; candidates: Transaction[] }> = [];
-
-        if (isSourceApp) {
-          setStep('checking_reverse');
-          reverseForwardedMatches = await transactionService.findReverseForwardedMatches(
-            result.transactions.map((t) => ({
-              payment: t.payment,
-              total: t.total,
-              date: t.date,
-            }))
-          );
-        }
-
-        // Process results
+        // Transform backend response to frontend state
         const transactionsWithMeta: ParsedTransaction[] = result.transactions.map(
-          (item, idx) => {
-            const transferMatch = transferMatches.find((m) => m.index === idx)?.match;
-
-            // Find forwarded match candidates for this transaction
-            const forwardedItemIndex = forwardedItems.findIndex((f) => f.originalIndex === idx);
-            const forwardedMatchData = forwardedItemIndex >= 0
-              ? forwardedMatches.find((m) => m.index === forwardedItemIndex)
-              : undefined;
-            const candidates = forwardedMatchData?.candidates || [];
-
-            // Find reverse CC match candidates (for source apps like Grab/Gojek)
-            const reverseCandidates = reverseForwardedMatches.find((m) => m.index === idx)?.candidates || [];
+          (item) => {
+            const candidates = item.forwardedMatchCandidates ?? [];
+            const reverseCandidates = item.reverseCcMatchCandidates ?? [];
 
             return {
               ...item,
               by: defaultUser,
-              remarks: '',
+              remarks: item.remarks ?? '',
               isExcluded: false,
-              isDuplicate: duplicateCheck[idx].exists,
+              isDuplicate: item.isDuplicate ?? false,
               imageUrl: result.imageUrl,
-              transferMatch: transferMatch || undefined,
-              matchedTransactionId: transferMatch?.id,
+              // Transfer match comes from backend
+              transferMatch: item.transferMatch ?? undefined,
+              matchedTransactionId: item.transferMatch?.id,
               keepSeparate: false,
+              // Forwarded match candidates come from backend
               forwardedMatchCandidates: candidates,
               forwardedMatch: candidates.length === 1 ? candidates[0] : undefined,
               skipForwardedMatch: false,
+              // Reverse CC match candidates come from backend
               reverseCcMatchCandidates: reverseCandidates,
               reverseCcMatch: reverseCandidates.length === 1 ? reverseCandidates[0] : undefined,
               skipReverseCcMatch: false,
@@ -180,7 +112,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         );
 
         setResults(transactionsWithMeta);
-        setStep('complete');
+        setStep('review');
         showToast(`Found ${transactionsWithMeta.length} transaction(s)`, 'success');
       } catch (err) {
         console.error('Upload failed:', err);

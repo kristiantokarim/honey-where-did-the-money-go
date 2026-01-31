@@ -424,4 +424,53 @@ export class TransactionsRepository {
       }),
     );
   }
+
+  async createManyWithLinks(
+    transactionsData: NewTransaction[],
+    links: Array<{
+      index: number;
+      matchedTransactionId?: number;  // Transfer link
+      reverseCcMatchId?: number;      // CC → App link
+    }>,
+  ): Promise<{ created: Transaction[]; createdIds: number[] }> {
+    return await this.db.transaction(async (tx) => {
+      // 1. Insert all transactions
+      const created = await tx.insert(transactions)
+        .values(transactionsData)
+        .returning();
+
+      const createdIds = created.map(t => t.id);
+
+      // 2. Link transfers (bidirectional)
+      for (const link of links) {
+        if (link.matchedTransactionId && created[link.index]) {
+          const newId = created[link.index].id;
+          const matchedId = link.matchedTransactionId;
+          await tx.update(transactions)
+            .set({
+              linkedTransferId: sql`CASE
+                WHEN ${transactions.id} = ${newId} THEN ${matchedId}
+                WHEN ${transactions.id} = ${matchedId} THEN ${newId}
+              END`,
+            })
+            .where(inArray(transactions.id, [newId, matchedId]));
+        }
+      }
+
+      // 3. Link reverse CC matches (update existing CC → new app transaction)
+      for (const link of links) {
+        if (link.reverseCcMatchId && created[link.index]) {
+          const appTransaction = created[link.index];
+          await tx.update(transactions)
+            .set({
+              forwardedTransactionId: appTransaction.id,
+              category: appTransaction.category,  // Sync category
+            })
+            .where(eq(transactions.id, link.reverseCcMatchId));
+        }
+      }
+
+      return { created, createdIds };
+    });
+  }
 }

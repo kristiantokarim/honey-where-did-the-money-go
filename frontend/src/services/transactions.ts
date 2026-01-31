@@ -1,6 +1,6 @@
 import { api } from './api';
 import type { Transaction, ParsedTransaction, DashboardItem, ParseResult } from '../types';
-import { Category, PaymentApp, TransactionType, LedgerMode, SortBy } from '../types/enums';
+import { Category, PaymentApp, LedgerMode, SortBy } from '../types/enums';
 
 export const transactionService = {
   upload: async (file: File, appType?: PaymentApp): Promise<ParseResult> => {
@@ -13,30 +13,10 @@ export const transactionService = {
     return response.data;
   },
 
-  checkDuplicates: async (
-    items: Array<{ date: string; total: number; to: string; expense?: string }>
-  ): Promise<Array<{ exists: boolean; matchedId?: number }>> => {
-    const response = await api.post<Array<{ exists: boolean; matchedId?: number }>>(
-      '/transactions/check-duplicates',
-      items
-    );
-    return response.data;
-  },
-
-  checkTransferMatches: async (
-    items: Array<{ transactionType: TransactionType; total: number; date: string; payment: PaymentApp }>
-  ): Promise<Array<{ index: number; match: Transaction | null }>> => {
-    const response = await api.post<Array<{ index: number; match: Transaction | null }>>(
-      '/transactions/check-transfer-matches',
-      items
-    );
-    return response.data;
-  },
-
   confirm: async (
     items: ParsedTransaction[]
-  ): Promise<{ success: boolean; count: number }> => {
-    const response = await api.post<{ success: boolean; count: number }>(
+  ): Promise<{ success: boolean; count: number; createdIds: number[] }> => {
+    const response = await api.post<{ success: boolean; count: number; createdIds: number[] }>(
       '/transactions/confirm',
       items
     );
@@ -104,16 +84,6 @@ export const transactionService = {
     await api.delete(`/transactions/${id}/link`);
   },
 
-  findForwardedMatches: async (
-    items: Array<{ forwardedFromApp: PaymentApp; total: number; date: string }>
-  ): Promise<Array<{ index: number; candidates: Transaction[] }>> => {
-    const response = await api.post<Array<{ index: number; candidates: Transaction[] }>>(
-      '/transactions/find-forwarded-matches',
-      items
-    );
-    return response.data;
-  },
-
   linkForwarded: async (ccTransactionId: number, appTransactionId: number): Promise<void> => {
     await api.post('/transactions/link-forwarded', {
       ccTransactionId,
@@ -123,15 +93,5 @@ export const transactionService = {
 
   unlinkForwarded: async (id: number): Promise<void> => {
     await api.delete(`/transactions/${id}/forwarded-link`);
-  },
-
-  findReverseForwardedMatches: async (
-    items: Array<{ payment: PaymentApp; total: number; date: string }>
-  ): Promise<Array<{ index: number; candidates: Transaction[] }>> => {
-    const response = await api.post<Array<{ index: number; candidates: Transaction[] }>>(
-      '/transactions/find-reverse-forwarded-matches',
-      items
-    );
-    return response.data;
   },
 };

@@ -1,4 +1,4 @@
-import { Upload, Search, FileText, CheckCircle, Loader2 } from 'lucide-react';
+import { Upload, FileText, CheckCircle, Loader2 } from 'lucide-react';
 
 interface UploadProgressProps {
   step: string;
@@ -7,9 +7,7 @@ interface UploadProgressProps {
 
 const STEPS = [
   { key: 'uploading', label: 'Uploading', icon: Upload },
-  { key: 'detecting', label: 'Detecting App', icon: Search },
-  { key: 'extracting', label: 'Extracting', icon: FileText },
-  { key: 'checking', label: 'Checking Duplicates', icon: CheckCircle },
+  { key: 'extracting', label: 'Processing', icon: FileText },
 ];
 
 export function UploadProgress({ step, message }: UploadProgressProps) {
@@ -33,7 +31,6 @@ export function UploadProgress({ step, message }: UploadProgressProps) {
             const Icon = s.icon;
             const isActive = s.key === step;
             const isCompleted = index < currentStepIndex;
-            const isPending = index > currentStepIndex;
 
             return (
               <div

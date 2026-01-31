@@ -25,19 +25,28 @@ export interface Transaction {
   forwardedCcTransactions?: Transaction[];
 }
 
-export interface ParsedTransaction extends Omit<Transaction, 'id'> {
-  isDuplicate: boolean;
+// Backend returns this enriched transaction structure
+export interface EnrichedParsedTransaction extends Omit<Transaction, 'id'> {
   isValid: boolean;
   status: string;
-  transferMatch?: Transaction;
+  // Enrichment fields from backend
+  isDuplicate?: boolean;
+  duplicateMatchedId?: number;
+  transferMatch?: Transaction | null;
+  forwardedMatchCandidates?: Transaction[];
+  reverseCcMatchCandidates?: Transaction[];
+}
+
+// Frontend extends with UI state
+export interface ParsedTransaction extends EnrichedParsedTransaction {
+  isDuplicate: boolean;  // Required in frontend (defaults false)
   keepSeparate: boolean;
   matchedTransactionId?: number;
   forwardedMatch?: Transaction;
-  forwardedMatchCandidates?: Transaction[];
   skipForwardedMatch?: boolean;
   reverseCcMatch?: Transaction;
-  reverseCcMatchCandidates?: Transaction[];
   skipReverseCcMatch?: boolean;
+  reverseCcMatchId?: number;  // For confirm payload
 }
 
 export interface DashboardItem {
@@ -53,6 +62,6 @@ export interface AppConfig {
 
 export interface ParseResult {
   appType: PaymentApp;
-  transactions: ParsedTransaction[];
-  imageUrl?: string;
+  transactions: EnrichedParsedTransaction[];
+  imageUrl: string;
 }

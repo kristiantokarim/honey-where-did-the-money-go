@@ -69,6 +69,10 @@ export class CreateTransactionDto {
   @IsEnum(PaymentApp)
   @IsOptional()
   forwardedFromApp?: PaymentApp;
+
+  @IsNumber()
+  @IsOptional()
+  reverseCcMatchId?: number;
 }
 
 export class UpdateTransactionDto extends PartialType(
@@ -99,40 +103,6 @@ export class DateRangeQueryDto {
   sortBy?: SortBy;
 }
 
-export class DuplicateCheckItemDto {
-  @IsString()
-  date: string;
-
-  @IsNumber()
-  @Type(() => Number)
-  total: number;
-
-  @IsString()
-  to: string;
-
-  @IsString()
-  @IsOptional()
-  expense?: string;
-
-  @IsEnum(PaymentApp)
-  payment: PaymentApp;
-}
-
-export class CheckTransferMatchDto {
-  @IsEnum(TransactionType)
-  transactionType: TransactionType;
-
-  @IsNumber()
-  @Type(() => Number)
-  total: number;
-
-  @IsString()
-  date: string;
-
-  @IsEnum(PaymentApp)
-  payment: PaymentApp;
-}
-
 export class LedgerTotalQueryDto {
   @IsDateString()
   startDate: string;
@@ -152,18 +122,6 @@ export class LedgerTotalQueryDto {
   by?: string;
 }
 
-export class FindForwardedMatchItemDto {
-  @IsEnum(PaymentApp)
-  forwardedFromApp: PaymentApp;
-
-  @IsNumber()
-  @Type(() => Number)
-  total: number;
-
-  @IsString()
-  date: string;
-}
-
 export class LinkForwardedDto {
   @IsNumber()
   @Type(() => Number)
@@ -174,14 +132,3 @@ export class LinkForwardedDto {
   appTransactionId: number;
 }
 
-export class CheckReverseForwardedMatchDto {
-  @IsEnum(PaymentApp)
-  payment: PaymentApp;
-
-  @IsNumber()
-  @Type(() => Number)
-  total: number;
-
-  @IsString()
-  date: string;
-}

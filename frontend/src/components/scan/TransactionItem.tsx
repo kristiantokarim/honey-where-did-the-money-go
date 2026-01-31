@@ -3,7 +3,7 @@ import { Trash2, Tag, Store, FolderOpen, XCircle, Copy, Link2, ChevronDown, Chev
 import { useAppContext } from '../../context/AppContext';
 import { formatIDR } from '../../utils/format';
 import { getTypeBadge } from '../../utils/transactionBadge';
-import type { ParsedTransaction, Transaction } from '../../types';
+import type { ParsedTransaction } from '../../types';
 
 interface TransactionItemProps {
   transaction: ParsedTransaction;
