@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Trash2, Tag, Store, FolderOpen, XCircle, Copy, Link2, ChevronDown, ChevronUp, Image, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { formatIDR } from '../../utils/format';
-import type { ParsedTransaction, TransactionType } from '../../types';
+import { getTypeBadge } from '../../utils/transactionBadge';
+import type { ParsedTransaction } from '../../types';
 
 interface TransactionItemProps {
   transaction: ParsedTransaction;
@@ -12,19 +13,6 @@ interface TransactionItemProps {
   onToggleDuplicate: (index: number) => void;
   onToggleKeepSeparate?: (index: number) => void;
   onViewImage?: (url: string) => void;
-}
-
-function getTypeBadge(type?: TransactionType) {
-  switch (type) {
-    case 'income':
-      return { label: 'Income', icon: ArrowDownLeft, bgColor: 'bg-green-100', textColor: 'text-green-700' };
-    case 'transfer_out':
-      return { label: 'Out', icon: ArrowUpRight, bgColor: 'bg-orange-100', textColor: 'text-orange-700' };
-    case 'transfer_in':
-      return { label: 'In', icon: ArrowDownLeft, bgColor: 'bg-blue-100', textColor: 'text-blue-700' };
-    default:
-      return null;
-  }
 }
 
 function isCancelledOrFailed(tx: ParsedTransaction): boolean {
@@ -47,7 +35,6 @@ export function TransactionItem({
   const isFailed = isCancelledOrFailed(transaction);
   const [matchExpanded, setMatchExpanded] = useState(false);
   const typeBadge = getTypeBadge(transaction.transactionType);
-  const hasTransferMatch = transaction.transferMatch && !transaction.keepSeparate;
 
   return (
     <div className={`rounded-[2rem] p-5 border shadow-sm space-y-4 ${

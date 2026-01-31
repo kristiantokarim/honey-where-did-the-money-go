@@ -23,7 +23,6 @@ export interface ParsedTransaction extends Omit<Transaction, 'id'> {
   isDuplicate?: boolean;
   isValid?: boolean;
   status?: string;
-  transactionType?: TransactionType;
   transferMatch?: Transaction;
   keepSeparate?: boolean;
   matchedTransactionId?: number;

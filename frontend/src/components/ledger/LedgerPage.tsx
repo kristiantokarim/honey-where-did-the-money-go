@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { X } from 'lucide-react';
 import { useTransactionContext } from '../../context/TransactionContext';
 import { useToast } from '../../context/ToastContext';
 import { useTransactions } from '../../hooks/useTransactions';
@@ -9,6 +8,7 @@ import { LedgerFilters } from './LedgerFilters';
 import { TransactionCard } from './TransactionCard';
 import { TransactionEditForm } from './TransactionEditForm';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { ImageLightbox } from '../common/ImageLightbox';
 import type { Transaction } from '../../types';
 
 export function LedgerPage() {
@@ -169,25 +169,12 @@ export function LedgerPage() {
         </div>
       )}
 
-      {/* Image Lightbox */}
       {viewingImageUrl && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-4 animate-fade-in"
-          onClick={() => setViewingImageUrl(null)}
-        >
-          <button
-            onClick={() => setViewingImageUrl(null)}
-            className="absolute top-6 right-6 bg-white/10 text-white p-3 rounded-full backdrop-blur-md active:scale-90 min-w-[44px] min-h-[44px]"
-          >
-            <X size={24} />
-          </button>
-          <img
-            src={viewingImageUrl}
-            alt="Transaction Screenshot"
-            className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl animate-zoom-in"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+        <ImageLightbox
+          imageUrl={viewingImageUrl}
+          alt="Transaction Screenshot"
+          onClose={() => setViewingImageUrl(null)}
+        />
       )}
 
       <ConfirmDialog

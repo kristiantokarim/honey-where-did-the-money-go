@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Edit3, Ban, Trash2, Image, Link2, ArrowUpRight, ArrowDownLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { Edit3, Ban, Trash2, Image, Link2, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatIDR, formatDate } from '../../utils/format';
-import type { Transaction, TransactionType } from '../../types';
+import { getTypeBadge } from '../../utils/transactionBadge';
+import type { Transaction } from '../../types';
 
 interface TransactionCardProps {
   transaction: Transaction;
@@ -15,17 +16,10 @@ interface TransactionCardProps {
   readonly?: boolean;
 }
 
-function getTypeBadge(type?: TransactionType) {
-  switch (type) {
-    case 'income':
-      return { label: 'Income', icon: ArrowDownLeft, bgColor: 'bg-green-100', textColor: 'text-green-700' };
-    case 'transfer_out':
-      return { label: 'Out', icon: ArrowUpRight, bgColor: 'bg-orange-100', textColor: 'text-orange-700' };
-    case 'transfer_in':
-      return { label: 'In', icon: ArrowDownLeft, bgColor: 'bg-blue-100', textColor: 'text-blue-700' };
-    default:
-      return null;
-  }
+function getCardClassName(isExcluded: boolean, isLinked: boolean): string {
+  if (isExcluded) return 'border-red-100 bg-red-50/20 grayscale';
+  if (isLinked) return 'border-blue-100 bg-blue-50/20';
+  return 'border-slate-100 shadow-sm';
 }
 
 export function TransactionCard({
@@ -46,13 +40,7 @@ export function TransactionCard({
 
   return (
     <div
-      className={`bg-white p-5 rounded-[2rem] border transition-all ${
-        tx.isExcluded
-          ? 'border-red-100 bg-red-50/20 grayscale'
-          : isLinked
-          ? 'border-blue-100 bg-blue-50/20'
-          : 'border-slate-100 shadow-sm'
-      }`}
+      className={`bg-white p-5 rounded-[2rem] border transition-all ${getCardClassName(!!tx.isExcluded, isLinked)}`}
     >
       <div className="flex flex-col gap-2">
         <div className="flex justify-between items-start">

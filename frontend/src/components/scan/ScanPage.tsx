@@ -9,6 +9,7 @@ import { FileUpload } from './FileUpload';
 import { ImagePreview } from './ImagePreview';
 import { TransactionItem } from './TransactionItem';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { ImageLightbox } from '../common/ImageLightbox';
 import { UploadProgress } from './UploadProgress';
 import type { ParsedTransaction } from '../../types';
 
@@ -56,25 +57,11 @@ export function ScanPage() {
     [defaultUser, selectedApp, startUpload]
   );
 
-  const handleUpdateTransaction = useCallback(
-    (index: number, field: keyof ParsedTransaction, value: string | number) => {
-      updateResult(index, field, value);
-    },
-    [updateResult]
-  );
-
   const handleRemoveConfirm = useCallback(() => {
     if (removingIndex === null) return;
     removeResult(removingIndex);
     setRemovingIndex(null);
   }, [removingIndex, removeResult]);
-
-  const handleToggleDuplicate = useCallback(
-    (index: number) => {
-      toggleDuplicate(index);
-    },
-    [toggleDuplicate]
-  );
 
   const isSaveable = (tx: ParsedTransaction) => {
     if (tx.isDuplicate) return false;
@@ -125,9 +112,9 @@ export function ScanPage() {
           key={i}
           transaction={tx}
           index={i}
-          onUpdate={handleUpdateTransaction}
+          onUpdate={updateResult}
           onRemove={setRemovingIndex}
-          onToggleDuplicate={handleToggleDuplicate}
+          onToggleDuplicate={toggleDuplicate}
           onToggleKeepSeparate={toggleKeepSeparate}
           onViewImage={(url) => {
             setMatchImageUrl(url);
@@ -196,22 +183,15 @@ export function ScanPage() {
         onCancel={() => setRemovingIndex(null)}
       />
 
-      {/* Lightbox for matched transaction's image */}
       {matchImageZoomed && matchImageUrl && (
-        <div
-          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-fade-in"
-          onClick={() => {
+        <ImageLightbox
+          imageUrl={matchImageUrl}
+          alt="Matched transaction screenshot"
+          onClose={() => {
             setMatchImageZoomed(false);
             setMatchImageUrl(null);
           }}
-        >
-          <img
-            src={matchImageUrl}
-            alt="Matched transaction screenshot"
-            className="max-h-[90vh] max-w-full object-contain rounded-lg animate-zoom-in"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+        />
       )}
     </div>
   );

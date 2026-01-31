@@ -3,7 +3,6 @@ import {
   useContext,
   useState,
   useCallback,
-  useRef,
   type ReactNode,
 } from 'react';
 import { transactionService } from '../services/transactions';
@@ -52,7 +51,6 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const [results, setResults] = useState<ParsedTransaction[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   const isUploading = ['uploading', 'detecting', 'extracting', 'checking'].includes(step);
 
@@ -73,9 +71,6 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       setPreviewUrl(newPreviewUrl);
       setError(null);
       setResults([]);
-
-      // Create abort controller for potential cancellation
-      abortControllerRef.current = new AbortController();
 
       try {
         // Step 1: Upload

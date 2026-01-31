@@ -18,8 +18,6 @@ interface TransactionContextValue {
   // Scan state
   scanData: ParsedTransaction[];
   setScanData: (data: ParsedTransaction[]) => void;
-  previewImage: string | null;
-  setPreviewImage: (url: string | null) => void;
 
   // History state
   historyData: Transaction[];
@@ -48,7 +46,6 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
 
   // Scan state
   const [scanData, setScanData] = useState<ParsedTransaction[]>([]);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // History state
   const [historyData, setHistoryData] = useState<Transaction[]>([]);
@@ -103,8 +100,6 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
       value={{
         scanData,
         setScanData,
-        previewImage,
-        setPreviewImage,
         historyData,
         setHistoryData,
         historyLoading,
