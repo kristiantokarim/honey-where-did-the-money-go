@@ -40,14 +40,18 @@ export function useTransactions() {
   );
 
   const deleteTransaction = useCallback(
-    async (id: number) => {
+    async (id: number): Promise<{ success: boolean; error?: string }> => {
       try {
         await transactionService.delete(id);
         await refreshHistory();
-        return true;
+        return { success: true };
       } catch (error) {
         console.error('Failed to delete transaction:', error);
-        return false;
+        const message =
+          error instanceof Error && 'response' in error
+            ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+            : undefined;
+        return { success: false, error: message };
       }
     },
     [refreshHistory]

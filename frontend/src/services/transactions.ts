@@ -28,12 +28,14 @@ export const transactionService = {
     endDate: string,
     category?: Category,
     by?: string,
-    sortBy?: SortBy
+    sortBy?: SortBy,
+    payment?: PaymentApp,
   ): Promise<Transaction[]> => {
     const params: Record<string, string> = { startDate, endDate };
     if (category) params.category = category;
     if (by) params.by = by;
     if (sortBy) params.sortBy = sortBy;
+    if (payment) params.payment = payment;
 
     const response = await api.get<Transaction[]>('/transactions/history', {
       params
@@ -43,10 +45,16 @@ export const transactionService = {
 
   getDashboard: async (
     startDate: string,
-    endDate: string
+    endDate: string,
+    by?: string,
+    payment?: PaymentApp,
   ): Promise<DashboardItem[]> => {
+    const params: Record<string, string> = { startDate, endDate };
+    if (by) params.by = by;
+    if (payment) params.payment = payment;
+
     const response = await api.get<DashboardItem[]>('/transactions/dashboard', {
-      params: { startDate, endDate },
+      params,
     });
     return response.data;
   },
@@ -56,11 +64,13 @@ export const transactionService = {
     endDate: string,
     mode: LedgerMode,
     category?: Category,
-    by?: string
+    by?: string,
+    payment?: PaymentApp,
   ): Promise<{ total: number }> => {
     const params: Record<string, string> = { startDate, endDate, mode };
     if (category) params.category = category;
     if (by) params.by = by;
+    if (payment) params.payment = payment;
 
     const response = await api.get<{ total: number }>('/transactions/ledger-total', {
       params,
@@ -93,5 +103,24 @@ export const transactionService = {
 
   unlinkForwarded: async (id: number): Promise<void> => {
     await api.delete(`/transactions/${id}/forwarded-link`);
+  },
+
+  findTransferMatch: async (id: number): Promise<{ match: Transaction | null }> => {
+    const response = await api.get<{ match: Transaction | null }>(`/transactions/${id}/find-transfer-match`);
+    return response.data;
+  },
+
+  findForwardedMatch: async (id: number): Promise<{ candidates: Transaction[] }> => {
+    const response = await api.get<{ candidates: Transaction[] }>(`/transactions/${id}/find-forwarded-match`);
+    return response.data;
+  },
+
+  findReverseCcMatch: async (id: number): Promise<{ candidates: Transaction[] }> => {
+    const response = await api.get<{ candidates: Transaction[] }>(`/transactions/${id}/find-reverse-cc-match`);
+    return response.data;
+  },
+
+  linkTransfer: async (id: number, matchedId: number): Promise<void> => {
+    await api.post(`/transactions/${id}/link-transfer`, { matchedId });
   },
 };

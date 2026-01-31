@@ -1,5 +1,6 @@
 import { useState, useCallback, type ChangeEvent } from 'react';
 import { useNavigate } from '@tanstack/react-router';
+import { ArrowLeft } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { useToast } from '../../context/ToastContext';
 import { useUpload } from '../../context/UploadContext';
@@ -109,6 +110,18 @@ export function ScanPage() {
 
   return (
     <div className="space-y-4">
+      {results.length > 0 && (
+        <div className="flex justify-between items-center">
+          <button
+            onClick={clearResults}
+            className="flex items-center gap-2 text-slate-500 font-semibold hover:text-slate-700 transition-colors"
+          >
+            <ArrowLeft size={16} />
+            New Scan
+          </button>
+        </div>
+      )}
+
       {previewUrl && results.length > 0 && (
         <ImagePreview
           imageUrl={previewUrl}

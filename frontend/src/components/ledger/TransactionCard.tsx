@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { Edit3, Ban, Trash2, Image, Link2, ChevronDown, ChevronUp, CreditCard, AlertCircle } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Edit3, Ban, Trash2, Image, Link2, ChevronDown, ChevronUp, CreditCard, AlertCircle, MoreVertical } from 'lucide-react';
 import { formatIDR, formatDate } from '../../utils/format';
 import { getTypeBadge } from '../../utils/transactionBadge';
+import { TransactionType, PaymentApp } from '../../types/enums';
 import type { Transaction } from '../../types';
 
 interface TransactionCardProps {
@@ -17,6 +18,9 @@ interface TransactionCardProps {
   onViewForwardedImage?: () => void;
   onUnlinkForwarded?: (ccTransactionId: number) => void;
   onViewCcImage?: (imageUrl: string) => void;
+  onFindTransferMatch?: () => void;
+  onFindForwardedMatch?: () => void;
+  onFindReverseCcMatch?: () => void;
   readonly?: boolean;
 }
 
@@ -41,6 +45,9 @@ export function TransactionCard({
   onViewForwardedImage,
   onUnlinkForwarded,
   onViewCcImage,
+  onFindTransferMatch,
+  onFindForwardedMatch,
+  onFindReverseCcMatch,
   readonly,
 }: TransactionCardProps) {
   const tx = transaction;
@@ -52,6 +59,30 @@ export function TransactionCard({
   const [linkExpanded, setLinkExpanded] = useState(false);
   const [forwardedExpanded, setForwardedExpanded] = useState(false);
   const [forwardedAppExpanded, setForwardedAppExpanded] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
+
+  const isTransfer = tx.transactionType === TransactionType.TransferIn || tx.transactionType === TransactionType.TransferOut;
+  const isAppTransaction = tx.payment === PaymentApp.Grab || tx.payment === PaymentApp.Gojek;
+  const isCcWithForwardedFrom = !!tx.forwardedFromApp && !tx.forwardedTransactionId;
+
+  const showRelinkMenu = !readonly && (
+    (isTransfer && !isLinked) ||
+    (isAppTransaction && !hasLinkedCc) ||
+    isCcWithForwardedFrom
+  );
 
   return (
     <div
@@ -148,6 +179,54 @@ export function TransactionCard({
                   >
                     <Link2 size={14} />
                   </button>
+                )}
+                {showRelinkMenu && (
+                  <div className="relative" ref={menuRef}>
+                    <button
+                      onClick={() => setMenuOpen(!menuOpen)}
+                      className="text-slate-300 hover:text-slate-500 p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                      title="More options"
+                    >
+                      <MoreVertical size={14} />
+                    </button>
+                    {menuOpen && (
+                      <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-30 min-w-[180px]">
+                        {isTransfer && !isLinked && onFindTransferMatch && (
+                          <button
+                            onClick={() => {
+                              setMenuOpen(false);
+                              onFindTransferMatch();
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            Find Transfer Match
+                          </button>
+                        )}
+                        {isAppTransaction && !hasLinkedCc && onFindReverseCcMatch && (
+                          <button
+                            onClick={() => {
+                              setMenuOpen(false);
+                              onFindReverseCcMatch();
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            Find CC Transactions
+                          </button>
+                        )}
+                        {isCcWithForwardedFrom && onFindForwardedMatch && (
+                          <button
+                            onClick={() => {
+                              setMenuOpen(false);
+                              onFindForwardedMatch();
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            Find App Transaction
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             )}

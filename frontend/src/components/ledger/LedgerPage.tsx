@@ -7,6 +7,7 @@ import { formatIDR } from '../../utils/format';
 import { LedgerFilters } from './LedgerFilters';
 import { TransactionCard } from './TransactionCard';
 import { TransactionEditForm } from './TransactionEditForm';
+import { RelinkDialog } from './RelinkDialog';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ImageLightbox } from '../common/ImageLightbox';
 import type { Transaction } from '../../types';
@@ -31,9 +32,14 @@ export function LedgerPage() {
   const [ledgerTotal, setLedgerTotal] = useState<number>(0);
   const [totalLoading, setTotalLoading] = useState(false);
 
+  const [relinkingTxId, setRelinkingTxId] = useState<number | null>(null);
+  const [relinkCandidates, setRelinkCandidates] = useState<Transaction[]>([]);
+  const [relinkType, setRelinkType] = useState<'transfer' | 'forwarded' | 'reverseCc' | null>(null);
+  const [relinkLoading, setRelinkLoading] = useState(false);
+
   useEffect(() => {
     refreshHistory();
-  }, [refreshHistory, dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by]);
+  }, [refreshHistory, dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by, ledgerFilters.payment]);
 
   useEffect(() => {
     const fetchTotal = async () => {
@@ -45,7 +51,8 @@ export function LedgerPage() {
           dateFilter.end,
           mode,
           ledgerFilters.category || undefined,
-          ledgerFilters.by || undefined
+          ledgerFilters.by || undefined,
+          ledgerFilters.payment || undefined
         );
         setLedgerTotal(result.total);
       } catch (error) {
@@ -56,7 +63,7 @@ export function LedgerPage() {
     };
 
     fetchTotal();
-  }, [dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by, showNetTotal, historyData]);
+  }, [dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by, ledgerFilters.payment, showNetTotal, historyData]);
 
   const handleSave = useCallback(
     async (tx: Transaction) => {
@@ -80,11 +87,11 @@ export function LedgerPage() {
 
   const handleDeleteConfirm = useCallback(async () => {
     if (deletingId === null) return;
-    const success = await deleteTransaction(deletingId);
-    if (success) {
+    const result = await deleteTransaction(deletingId);
+    if (result.success) {
       showToast('Transaction deleted', 'success');
     } else {
-      showToast('Failed to delete transaction', 'error');
+      showToast(result.error || 'Failed to delete transaction', 'error');
     }
     setDeletingId(null);
   }, [deletingId, deleteTransaction, showToast]);
@@ -119,6 +126,99 @@ export function LedgerPage() {
     },
     [updateLocalTransaction]
   );
+
+  const handleFindTransferMatch = useCallback(async (id: number) => {
+    setRelinkLoading(true);
+    try {
+      const { match } = await transactionService.findTransferMatch(id);
+      if (match) {
+        await transactionService.linkTransfer(id, match.id);
+        showToast('Transfer linked', 'success');
+        refreshHistory();
+      } else {
+        showToast('No transfer match found', 'info');
+      }
+    } catch (error) {
+      console.error('Failed to find transfer match:', error);
+      showToast('Failed to find match', 'error');
+    } finally {
+      setRelinkLoading(false);
+    }
+  }, [showToast, refreshHistory]);
+
+  const handleFindForwardedMatch = useCallback(async (id: number) => {
+    setRelinkLoading(true);
+    try {
+      const { candidates } = await transactionService.findForwardedMatch(id);
+      if (candidates.length === 0) {
+        showToast('No app transaction matches found', 'info');
+      } else if (candidates.length === 1) {
+        await transactionService.linkForwarded(id, candidates[0].id);
+        showToast('Linked to app transaction', 'success');
+        refreshHistory();
+      } else {
+        setRelinkingTxId(id);
+        setRelinkCandidates(candidates);
+        setRelinkType('forwarded');
+      }
+    } catch (error) {
+      console.error('Failed to find forwarded match:', error);
+      showToast('Failed to find match', 'error');
+    } finally {
+      setRelinkLoading(false);
+    }
+  }, [showToast, refreshHistory]);
+
+  const handleFindReverseCcMatch = useCallback(async (id: number) => {
+    setRelinkLoading(true);
+    try {
+      const { candidates } = await transactionService.findReverseCcMatch(id);
+      if (candidates.length === 0) {
+        showToast('No CC transaction matches found', 'info');
+      } else if (candidates.length === 1) {
+        await transactionService.linkForwarded(candidates[0].id, id);
+        showToast('CC transaction linked', 'success');
+        refreshHistory();
+      } else {
+        setRelinkingTxId(id);
+        setRelinkCandidates(candidates);
+        setRelinkType('reverseCc');
+      }
+    } catch (error) {
+      console.error('Failed to find reverse CC match:', error);
+      showToast('Failed to find match', 'error');
+    } finally {
+      setRelinkLoading(false);
+    }
+  }, [showToast, refreshHistory]);
+
+  const handleRelinkSelect = useCallback(async (selectedId: number) => {
+    if (relinkingTxId === null || relinkType === null) return;
+
+    try {
+      if (relinkType === 'forwarded') {
+        await transactionService.linkForwarded(relinkingTxId, selectedId);
+        showToast('Linked to app transaction', 'success');
+      } else if (relinkType === 'reverseCc') {
+        await transactionService.linkForwarded(selectedId, relinkingTxId);
+        showToast('CC transaction linked', 'success');
+      }
+      refreshHistory();
+    } catch (error) {
+      console.error('Failed to link:', error);
+      showToast('Failed to link transactions', 'error');
+    } finally {
+      setRelinkingTxId(null);
+      setRelinkCandidates([]);
+      setRelinkType(null);
+    }
+  }, [relinkingTxId, relinkType, showToast, refreshHistory]);
+
+  const handleRelinkCancel = useCallback(() => {
+    setRelinkingTxId(null);
+    setRelinkCandidates([]);
+    setRelinkType(null);
+  }, []);
 
   if (historyLoading && historyData.length === 0) {
     return (
@@ -179,6 +279,9 @@ export function LedgerPage() {
                 ? () => setViewingImageUrl(tx.forwardedTransaction!.imageUrl!)
                 : undefined
             }
+            onFindTransferMatch={() => handleFindTransferMatch(tx.id)}
+            onFindForwardedMatch={() => handleFindForwardedMatch(tx.id)}
+            onFindReverseCcMatch={() => handleFindReverseCcMatch(tx.id)}
           />
         )
       )}
@@ -223,6 +326,22 @@ export function LedgerPage() {
         onConfirm={handleUnlinkForwardedConfirm}
         onCancel={() => setUnlinkingForwardedId(null)}
       />
+
+      <RelinkDialog
+        isOpen={relinkingTxId !== null && relinkCandidates.length > 0}
+        title={relinkType === 'forwarded' ? 'Select App Transaction' : 'Select CC Transaction'}
+        candidates={relinkCandidates}
+        onSelect={handleRelinkSelect}
+        onCancel={handleRelinkCancel}
+      />
+
+      {relinkLoading && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-xl p-4 shadow-lg">
+            <p className="text-slate-600 font-medium">Finding matches...</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

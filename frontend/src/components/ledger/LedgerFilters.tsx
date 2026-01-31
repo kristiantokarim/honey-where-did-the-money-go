@@ -1,6 +1,7 @@
 import { ArrowRight } from 'lucide-react';
 import { useTransactionContext } from '../../context/TransactionContext';
 import { useAppContext } from '../../context/AppContext';
+import { Category, PaymentApp } from '../../types/enums';
 
 export function LedgerFilters() {
   const { dateFilter, setDateFilter, ledgerFilters, setLedgerFilters } = useTransactionContext();
@@ -30,7 +31,7 @@ export function LedgerFilters() {
           className="flex-1 font-bold bg-slate-50 rounded-xl p-2.5 outline-none min-h-[44px]"
           style={{ fontSize: '16px' }}
           value={ledgerFilters.category}
-          onChange={(e) => setLedgerFilters({ ...ledgerFilters, category: e.target.value })}
+          onChange={(e) => setLedgerFilters({ ...ledgerFilters, category: e.target.value as Category | '' })}
         >
           <option value="">All Categories</option>
           {config?.categories.map((cat) => (
@@ -49,6 +50,21 @@ export function LedgerFilters() {
           {config?.users.map((user) => (
             <option key={user} value={user}>
               {user}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <select
+          className="flex-1 font-bold bg-slate-50 rounded-xl p-2.5 outline-none min-h-[44px]"
+          style={{ fontSize: '16px' }}
+          value={ledgerFilters.payment}
+          onChange={(e) => setLedgerFilters({ ...ledgerFilters, payment: e.target.value as PaymentApp | '' })}
+        >
+          <option value="">All Payment Apps</option>
+          {config?.paymentMethods.map((pm) => (
+            <option key={pm} value={pm}>
+              {pm}
             </option>
           ))}
         </select>

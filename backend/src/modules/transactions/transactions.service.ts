@@ -177,8 +177,8 @@ export class TransactionsService {
   async getHistory(
     query: DateRangeQueryDto,
   ): Promise<Array<Transaction & { linkedTransaction?: Transaction; forwardedTransaction?: Transaction; forwardedCcTransactions?: Transaction[] }>> {
-    const { startDate, endDate, category, by, sortBy } = query;
-    const transactions = await this.repository.findByDateRange(startDate, endDate, category, by, sortBy);
+    const { startDate, endDate, category, by, sortBy, payment } = query;
+    const transactions = await this.repository.findByDateRange(startDate, endDate, category, by, sortBy, payment);
 
     // Collect all linked transfer IDs that need to be fetched
     const linkedIds = transactions
@@ -229,15 +229,17 @@ export class TransactionsService {
   async getDashboard(
     startDate: string,
     endDate: string,
+    by?: string,
+    payment?: PaymentApp,
   ): Promise<Array<{ name: string; total: number }>> {
-    return this.repository.getDashboardData(startDate, endDate);
+    return this.repository.getDashboardData(startDate, endDate, by, payment);
   }
 
   async getLedgerTotal(
     query: LedgerTotalQueryDto,
   ): Promise<{ total: number }> {
-    const { startDate, endDate, mode, category, by } = query;
-    return this.repository.getLedgerTotal(startDate, endDate, mode, category, by);
+    const { startDate, endDate, mode, category, by, payment } = query;
+    return this.repository.getLedgerTotal(startDate, endDate, mode, category, by, payment);
   }
 
   async update(id: number, data: UpdateTransactionDto): Promise<Transaction> {
@@ -283,9 +285,23 @@ export class TransactionsService {
   async delete(id: number): Promise<void> {
     const existing = await this.findByIdOrThrow(id);
 
-    // Clear partner's link if this transaction was linked
     if (existing.linkedTransferId) {
-      await this.repository.unlinkTransfer(id);
+      throw new BadRequestException(
+        'Cannot delete linked transfer. Unlink the transfer first.'
+      );
+    }
+
+    if (existing.forwardedTransactionId) {
+      throw new BadRequestException(
+        'Cannot delete linked CC transaction. Unlink from app transaction first.'
+      );
+    }
+
+    const ccChildren = await this.repository.findTransactionsWithForwardedLink([id]);
+    if (ccChildren.length > 0) {
+      throw new BadRequestException(
+        'Cannot delete transaction with linked CC payments. Unlink them first.'
+      );
     }
 
     await this.repository.delete(id);
@@ -326,5 +342,77 @@ export class TransactionsService {
 
     await this.repository.unlinkForwarded(id);
     this.logger.log(`Unlinked forwarded transaction ${id} from ${existing.forwardedTransactionId}`);
+  }
+
+  async findTransferMatchForTransaction(id: number): Promise<Transaction | null> {
+    const tx = await this.findByIdOrThrow(id);
+
+    if (tx.linkedTransferId) {
+      throw new BadRequestException('Transaction is already linked');
+    }
+
+    if (tx.transactionType !== TransactionType.TransferIn && tx.transactionType !== TransactionType.TransferOut) {
+      throw new BadRequestException('Only transfer transactions can be matched');
+    }
+
+    const matches = await this.repository.findPotentialTransferMatches([{
+      transactionType: tx.transactionType,
+      total: tx.total,
+      date: tx.date,
+      payment: tx.payment as PaymentApp,
+    }]);
+
+    return matches[0]?.match || null;
+  }
+
+  async findForwardedMatchForTransaction(id: number): Promise<Transaction[]> {
+    const tx = await this.findByIdOrThrow(id);
+
+    if (!tx.forwardedFromApp) {
+      throw new BadRequestException('This transaction has no forwardedFromApp field');
+    }
+
+    if (tx.forwardedTransactionId) {
+      throw new BadRequestException('Transaction is already linked to an app transaction');
+    }
+
+    const matches = await this.repository.findForwardedMatchCandidates([{
+      forwardedFromApp: tx.forwardedFromApp as PaymentApp,
+      total: tx.total,
+      date: tx.date,
+    }]);
+
+    return matches[0]?.candidates || [];
+  }
+
+  async findReverseCcMatchForTransaction(id: number): Promise<Transaction[]> {
+    const tx = await this.findByIdOrThrow(id);
+
+    if (tx.payment !== PaymentApp.Grab && tx.payment !== PaymentApp.Gojek) {
+      throw new BadRequestException('Only Grab or Gojek transactions can find CC matches');
+    }
+
+    const matches = await this.repository.findReverseForwardedMatchCandidates([{
+      payment: tx.payment,
+      total: tx.total,
+      date: tx.date,
+    }]);
+
+    return matches[0]?.candidates || [];
+  }
+
+  async linkTransfer(id: number, matchedId: number): Promise<void> {
+    const tx = await this.findByIdOrThrow(id);
+    const matchedTx = await this.findByIdOrThrow(matchedId);
+
+    if (tx.linkedTransferId) {
+      throw new BadRequestException('Transaction is already linked');
+    }
+    if (matchedTx.linkedTransferId) {
+      throw new BadRequestException('Matched transaction is already linked');
+    }
+
+    await this.repository.linkTransfers(id, matchedId);
+    this.logger.log(`Linked transactions ${id} and ${matchedId}`);
   }
 }

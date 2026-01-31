@@ -57,7 +57,7 @@ export class TransactionsController {
 
   @Get('dashboard')
   async getDashboard(@Query() query: DateRangeQueryDto) {
-    return this.transactionsService.getDashboard(query.startDate, query.endDate);
+    return this.transactionsService.getDashboard(query.startDate, query.endDate, query.by, query.payment);
   }
 
   @Get('ledger-total')
@@ -97,6 +97,33 @@ export class TransactionsController {
   @Delete(':id/forwarded-link')
   async unlinkForwarded(@Param('id', ParseIntPipe) id: number) {
     await this.transactionsService.unlinkForwarded(id);
+    return { success: true };
+  }
+
+  @Get(':id/find-transfer-match')
+  async findTransferMatch(@Param('id', ParseIntPipe) id: number) {
+    const match = await this.transactionsService.findTransferMatchForTransaction(id);
+    return { match };
+  }
+
+  @Get(':id/find-forwarded-match')
+  async findForwardedMatch(@Param('id', ParseIntPipe) id: number) {
+    const candidates = await this.transactionsService.findForwardedMatchForTransaction(id);
+    return { candidates };
+  }
+
+  @Get(':id/find-reverse-cc-match')
+  async findReverseCcMatch(@Param('id', ParseIntPipe) id: number) {
+    const candidates = await this.transactionsService.findReverseCcMatchForTransaction(id);
+    return { candidates };
+  }
+
+  @Post(':id/link-transfer')
+  async linkTransfer(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('matchedId', ParseIntPipe) matchedId: number,
+  ) {
+    await this.transactionsService.linkTransfer(id, matchedId);
     return { success: true };
   }
 }

@@ -98,6 +98,10 @@ export class DateRangeQueryDto {
   @IsOptional()
   by?: string;
 
+  @IsEnum(PaymentApp)
+  @IsOptional()
+  payment?: PaymentApp;
+
   @IsEnum(SortBy)
   @IsOptional()
   sortBy?: SortBy;
@@ -120,6 +124,10 @@ export class LedgerTotalQueryDto {
   @IsString()
   @IsOptional()
   by?: string;
+
+  @IsEnum(PaymentApp)
+  @IsOptional()
+  payment?: PaymentApp;
 }
 
 export class LinkForwardedDto {

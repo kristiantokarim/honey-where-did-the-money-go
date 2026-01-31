@@ -1,21 +1,24 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTransactionContext } from '../../context/TransactionContext';
+import { useAppContext } from '../../context/AppContext';
 import { transactionService } from '../../services/transactions';
 import { DateFilter } from '../ledger/DateFilter';
 import { TotalCard } from './TotalCard';
 import { CategoryChart } from './CategoryChart';
 import { CategoryTransactionsModal } from './CategoryTransactionsModal';
+import { Category, PaymentApp } from '../../types/enums';
 import type { Transaction } from '../../types';
 
 export function DashboardPage() {
-  const { dashData, dashLoading, refreshDashboard, dateFilter } = useTransactionContext();
+  const { dashData, dashLoading, refreshDashboard, dateFilter, dashboardFilters, setDashboardFilters } = useTransactionContext();
+  const { config } = useAppContext();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [categoryTransactions, setCategoryTransactions] = useState<Transaction[]>([]);
   const [modalLoading, setModalLoading] = useState(false);
 
   useEffect(() => {
     refreshDashboard();
-  }, [refreshDashboard, dateFilter.start, dateFilter.end]);
+  }, [refreshDashboard, dateFilter.start, dateFilter.end, dashboardFilters.by, dashboardFilters.payment]);
 
   const handleCategoryClick = useCallback(
     async (categoryName: string) => {
@@ -25,9 +28,10 @@ export function DashboardPage() {
         const txs = await transactionService.getHistory(
           dateFilter.start,
           dateFilter.end,
-          categoryName,
+          categoryName as Category,
+          dashboardFilters.by || undefined,
           undefined,
-          'date'
+          dashboardFilters.payment || undefined
         );
         setCategoryTransactions(txs);
       } catch (error) {
@@ -37,7 +41,7 @@ export function DashboardPage() {
         setModalLoading(false);
       }
     },
-    [dateFilter.start, dateFilter.end]
+    [dateFilter.start, dateFilter.end, dashboardFilters.by, dashboardFilters.payment]
   );
 
   const handleCloseModal = useCallback(() => {
@@ -58,6 +62,34 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <DateFilter />
+      <div className="flex items-center gap-2">
+        <select
+          className="flex-1 font-bold bg-white rounded-xl p-2.5 outline-none min-h-[44px] border border-slate-100"
+          style={{ fontSize: '16px' }}
+          value={dashboardFilters.by}
+          onChange={(e) => setDashboardFilters({ ...dashboardFilters, by: e.target.value })}
+        >
+          <option value="">All Users</option>
+          {config?.users.map((user) => (
+            <option key={user} value={user}>
+              {user}
+            </option>
+          ))}
+        </select>
+        <select
+          className="flex-1 font-bold bg-white rounded-xl p-2.5 outline-none min-h-[44px] border border-slate-100"
+          style={{ fontSize: '16px' }}
+          value={dashboardFilters.payment}
+          onChange={(e) => setDashboardFilters({ ...dashboardFilters, payment: e.target.value as PaymentApp | '' })}
+        >
+          <option value="">All Payment Apps</option>
+          {config?.paymentMethods.map((pm) => (
+            <option key={pm} value={pm}>
+              {pm}
+            </option>
+          ))}
+        </select>
+      </div>
       <TotalCard total={total} />
       <CategoryChart data={dashData} onCategoryClick={handleCategoryClick} />
       <CategoryTransactionsModal

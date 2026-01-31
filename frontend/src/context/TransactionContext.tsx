@@ -3,7 +3,7 @@ import { transactionService } from '../services/transactions';
 import { useToast } from './ToastContext';
 import { getMonthRange } from '../utils/format';
 import type { Transaction, ParsedTransaction, DashboardItem } from '../types';
-import { Category } from '../types/enums';
+import { Category, PaymentApp } from '../types/enums';
 
 interface DateFilter {
   start: string;
@@ -13,6 +13,12 @@ interface DateFilter {
 interface LedgerFilters {
   category: Category | '';
   by: string;
+  payment: PaymentApp | '';
+}
+
+interface DashboardFilters {
+  by: string;
+  payment: PaymentApp | '';
 }
 
 interface TransactionContextValue {
@@ -35,9 +41,13 @@ interface TransactionContextValue {
   dateFilter: DateFilter;
   setDateFilter: (filter: DateFilter) => void;
 
-  // Ledger filters (category and by)
+  // Ledger filters (category, by, payment)
   ledgerFilters: LedgerFilters;
   setLedgerFilters: (filters: LedgerFilters) => void;
+
+  // Dashboard filters (by, payment)
+  dashboardFilters: DashboardFilters;
+  setDashboardFilters: (filters: DashboardFilters) => void;
 }
 
 const TransactionContext = createContext<TransactionContextValue | null>(null);
@@ -63,6 +73,13 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
   const [ledgerFilters, setLedgerFilters] = useState<LedgerFilters>({
     category: '',
     by: '',
+    payment: '',
+  });
+
+  // Dashboard filters
+  const [dashboardFilters, setDashboardFilters] = useState<DashboardFilters>({
+    by: '',
+    payment: '',
   });
 
   const refreshHistory = useCallback(async () => {
@@ -73,6 +90,8 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
         dateFilter.end,
         ledgerFilters.category || undefined,
         ledgerFilters.by || undefined,
+        undefined,
+        ledgerFilters.payment || undefined,
       );
       setHistoryData(data);
     } catch (error) {
@@ -81,12 +100,17 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
     } finally {
       setHistoryLoading(false);
     }
-  }, [dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by, showToast]);
+  }, [dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by, ledgerFilters.payment, showToast]);
 
   const refreshDashboard = useCallback(async () => {
     setDashLoading(true);
     try {
-      const data = await transactionService.getDashboard(dateFilter.start, dateFilter.end);
+      const data = await transactionService.getDashboard(
+        dateFilter.start,
+        dateFilter.end,
+        dashboardFilters.by || undefined,
+        dashboardFilters.payment || undefined,
+      );
       setDashData(data);
     } catch (error) {
       console.error('Failed to fetch dashboard:', error);
@@ -94,7 +118,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
     } finally {
       setDashLoading(false);
     }
-  }, [dateFilter.start, dateFilter.end, showToast]);
+  }, [dateFilter.start, dateFilter.end, dashboardFilters.by, dashboardFilters.payment, showToast]);
 
   return (
     <TransactionContext.Provider
@@ -112,6 +136,8 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
         setDateFilter,
         ledgerFilters,
         setLedgerFilters,
+        dashboardFilters,
+        setDashboardFilters,
       }}
     >
       {children}
