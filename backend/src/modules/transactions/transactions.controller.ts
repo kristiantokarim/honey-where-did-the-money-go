@@ -22,6 +22,7 @@ import {
   CheckTransferMatchDto,
   LedgerTotalQueryDto,
 } from '../../common/dtos/transaction.dto';
+import { PaymentApp } from '../../common/enums';
 
 @Controller('transactions')
 export class TransactionsController {
@@ -31,7 +32,7 @@ export class TransactionsController {
   @UseInterceptors(FileInterceptor('file'))
   async upload(
     @UploadedFile() file: Express.Multer.File,
-    @Body('appType') appType?: string,
+    @Body('appType') appType?: PaymentApp,
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
@@ -62,13 +63,7 @@ export class TransactionsController {
 
   @Get('history')
   async getHistory(@Query() query: DateRangeQueryDto) {
-    return this.transactionsService.getHistory(
-      query.startDate,
-      query.endDate,
-      query.category,
-      query.by,
-      query.sortBy,
-    );
+    return this.transactionsService.getHistory(query);
   }
 
   @Get('dashboard')
@@ -78,13 +73,7 @@ export class TransactionsController {
 
   @Get('ledger-total')
   async getLedgerTotal(@Query() query: LedgerTotalQueryDto) {
-    return this.transactionsService.getLedgerTotal(
-      query.startDate,
-      query.endDate,
-      query.mode,
-      query.category,
-      query.by,
-    );
+    return this.transactionsService.getLedgerTotal(query);
   }
 
   @Put(':id')

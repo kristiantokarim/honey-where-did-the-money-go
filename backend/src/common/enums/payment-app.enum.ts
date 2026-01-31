@@ -1,7 +1,11 @@
 export enum PaymentApp {
-  GOJEK = 'Gojek',
+  Gojek = 'Gojek',
   OVO = 'OVO',
   BCA = 'BCA',
-  GRAB = 'Grab',
-  UNKNOWN = 'Unknown',
+  Grab = 'Grab',
+  Dana = 'Dana',
+  Jenius = 'Jenius',
+  Jago = 'Jago',
+  Danamon = 'Danamon',
+  Unknown = 'Unknown',
 }

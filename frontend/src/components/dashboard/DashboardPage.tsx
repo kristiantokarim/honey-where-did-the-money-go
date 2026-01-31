@@ -27,7 +27,7 @@ export function DashboardPage() {
           dateFilter.end,
           categoryName,
           undefined,
-          'total'
+          'date'
         );
         setCategoryTransactions(txs);
       } catch (error) {

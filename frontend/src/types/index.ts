@@ -1,46 +1,48 @@
-export type TransactionType = 'expense' | 'income' | 'transfer_out' | 'transfer_in';
+import { Category, TransactionType, PaymentApp } from './enums';
+
+export * from './enums';
 
 export interface Transaction {
   id: number;
   date: string;
-  category: string;
+  category: Category;
   expense: string;
   price: number;
   quantity: number;
   total: number;
-  payment: string;
+  payment: PaymentApp;
   by: string;
   to: string;
   remarks?: string;
   imageUrl?: string;
-  isExcluded?: boolean;
-  transactionType?: TransactionType;
+  isExcluded: boolean;
+  transactionType: TransactionType;
   linkedTransferId?: number;
   linkedTransaction?: Transaction;
 }
 
 export interface ParsedTransaction extends Omit<Transaction, 'id'> {
-  isDuplicate?: boolean;
-  isValid?: boolean;
-  status?: string;
+  isDuplicate: boolean;
+  isValid: boolean;
+  status: string;
   transferMatch?: Transaction;
-  keepSeparate?: boolean;
+  keepSeparate: boolean;
   matchedTransactionId?: number;
 }
 
 export interface DashboardItem {
-  name: string;
+  name: Category;
   total: number;
 }
 
 export interface AppConfig {
-  categories: string[];
+  categories: Category[];
   users: string[];
-  paymentMethods: string[];
+  paymentMethods: PaymentApp[];
 }
 
 export interface ParseResult {
-  appType: string;
+  appType: PaymentApp;
   transactions: ParsedTransaction[];
   imageUrl?: string;
 }

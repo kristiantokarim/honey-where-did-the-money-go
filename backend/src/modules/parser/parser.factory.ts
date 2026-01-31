@@ -11,6 +11,7 @@ import {
   DanamonParser,
   DefaultParser,
 } from './strategies';
+import { PaymentApp } from '../../common/enums';
 
 @Injectable()
 export class ParserFactory {
@@ -54,9 +55,9 @@ export class ParserFactory {
   /**
    * Get list of all supported app types.
    */
-  getSupportedApps(): string[] {
+  getSupportedApps(): PaymentApp[] {
     return this.parsers
-      .filter((p) => p.appType !== 'Unknown')
+      .filter((p) => p.appType !== PaymentApp.Unknown)
       .map((p) => p.appType);
   }
 }

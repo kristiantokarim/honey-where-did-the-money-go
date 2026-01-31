@@ -1,12 +1,18 @@
-import { IsString, IsNumber, IsOptional, IsBoolean, Min, IsDateString, IsArray, ValidateNested, IsIn } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsBoolean, Min, IsDateString, IsEnum } from 'class-validator';
 import { Type } from 'class-transformer';
+import { PartialType, OmitType } from '@nestjs/mapped-types';
+import { Category } from '../enums/category.enum';
+import { PaymentApp } from '../enums/payment-app.enum';
+import { TransactionType } from '../enums/transaction-type.enum';
+import { LedgerMode } from '../enums/ledger-mode.enum';
+import { SortBy } from '../enums/sort-by.enum';
 
 export class CreateTransactionDto {
   @IsDateString()
   date: string;
 
-  @IsString()
-  category: string;
+  @IsEnum(Category)
+  category: Category;
 
   @IsString()
   expense: string;
@@ -23,8 +29,8 @@ export class CreateTransactionDto {
   @Min(0)
   total: number;
 
-  @IsString()
-  payment: string;
+  @IsEnum(PaymentApp)
+  payment: PaymentApp;
 
   @IsString()
   by: string;
@@ -44,9 +50,9 @@ export class CreateTransactionDto {
   @IsOptional()
   imageUrl?: string;
 
-  @IsString()
+  @IsEnum(TransactionType)
   @IsOptional()
-  transactionType?: string;
+  transactionType?: TransactionType;
 
   @IsNumber()
   @IsOptional()
@@ -57,60 +63,12 @@ export class CreateTransactionDto {
   matchedTransactionId?: number;
 }
 
-export class UpdateTransactionDto {
-  @IsDateString()
-  @IsOptional()
-  date?: string;
-
-  @IsString()
-  @IsOptional()
-  category?: string;
-
-  @IsString()
-  @IsOptional()
-  expense?: string;
-
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  price?: number;
-
-  @IsNumber()
-  @IsOptional()
-  quantity?: number;
-
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  total?: number;
-
-  @IsString()
-  @IsOptional()
-  payment?: string;
-
-  @IsString()
-  @IsOptional()
-  by?: string;
-
-  @IsString()
-  @IsOptional()
-  to?: string;
-
-  @IsString()
-  @IsOptional()
-  remarks?: string;
-
-  @IsString()
-  @IsOptional()
-  paymentCorrection?: string;
-
+export class UpdateTransactionDto extends PartialType(
+  OmitType(CreateTransactionDto, ['matchedTransactionId', 'imageUrl', 'linkedTransferId'] as const)
+) {
   @IsBoolean()
   @IsOptional()
   isExcluded?: boolean;
-
-  @IsString()
-  @IsOptional()
-  transactionType?: string;
 }
 
 export class DateRangeQueryDto {
@@ -120,17 +78,17 @@ export class DateRangeQueryDto {
   @IsDateString()
   endDate: string;
 
-  @IsString()
+  @IsEnum(Category)
   @IsOptional()
-  category?: string;
+  category?: Category;
 
   @IsString()
   @IsOptional()
   by?: string;
 
-  @IsString()
+  @IsEnum(SortBy)
   @IsOptional()
-  sortBy?: string;
+  sortBy?: SortBy;
 }
 
 export class DuplicateCheckItemDto {
@@ -150,8 +108,8 @@ export class DuplicateCheckItemDto {
 }
 
 export class CheckTransferMatchDto {
-  @IsString()
-  transactionType: string;
+  @IsEnum(TransactionType)
+  transactionType: TransactionType;
 
   @IsNumber()
   @Type(() => Number)
@@ -160,8 +118,8 @@ export class CheckTransferMatchDto {
   @IsString()
   date: string;
 
-  @IsString()
-  payment: string;
+  @IsEnum(PaymentApp)
+  payment: PaymentApp;
 }
 
 export class LedgerTotalQueryDto {
@@ -171,13 +129,12 @@ export class LedgerTotalQueryDto {
   @IsDateString()
   endDate: string;
 
-  @IsString()
-  @IsIn(['expenses_only', 'net_total'])
-  mode: 'expenses_only' | 'net_total';
+  @IsEnum(LedgerMode)
+  mode: LedgerMode;
 
-  @IsString()
+  @IsEnum(Category)
   @IsOptional()
-  category?: string;
+  category?: Category;
 
   @IsString()
   @IsOptional()

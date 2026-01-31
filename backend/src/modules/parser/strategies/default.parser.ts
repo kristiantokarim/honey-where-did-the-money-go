@@ -1,7 +1,8 @@
 import { BaseParser } from './base.parser';
+import { PaymentApp } from '../../../common/enums';
 
 export class DefaultParser extends BaseParser {
-  readonly appType = 'Unknown';
+  readonly appType = PaymentApp.Unknown;
 
   canParse(detectedApp: string): boolean {
     return true; // Always matches as fallback

@@ -1,22 +1,24 @@
-export type TransactionType = 'expense' | 'income' | 'transfer_out' | 'transfer_in';
+import { Category } from '../enums/category.enum';
+import { PaymentApp } from '../enums/payment-app.enum';
+import { TransactionType } from '../enums/transaction-type.enum';
 
 export interface ParsedTransaction {
   date: string;
-  category: string;
+  category: Category;
   expense: string;
   price: number;
   quantity: number;
   total: number;
-  payment: string;
+  payment: PaymentApp;
   to: string;
   remarks?: string;
-  status?: string;
-  isValid?: boolean;
-  transactionType?: TransactionType;
+  status: string;
+  isValid: boolean;
+  transactionType: TransactionType;
 }
 
 export interface ParseResult {
-  appType: string;
+  appType: PaymentApp;
   transactions: ParsedTransaction[];
   imageUrl?: string;
 }

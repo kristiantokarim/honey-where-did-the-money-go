@@ -6,5 +6,3 @@ export interface IAIProvider {
     mimeType: string,
   ): Promise<{ text: string }>;
 }
-
-export const AI_PROVIDER_FACTORY = 'AI_PROVIDER_FACTORY';

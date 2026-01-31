@@ -1,11 +1,8 @@
 import { BaseParser } from './base.parser';
+import { PaymentApp } from '../../../common/enums';
 
 export class BCAParser extends BaseParser {
-  readonly appType = 'BCA';
-
-  canParse(detectedApp: string): boolean {
-    return detectedApp.toLowerCase() === 'bca';
-  }
+  readonly appType = PaymentApp.BCA;
 
   getPrompt(): string {
     return `Extract BCA m-Banking transaction history from this screenshot.

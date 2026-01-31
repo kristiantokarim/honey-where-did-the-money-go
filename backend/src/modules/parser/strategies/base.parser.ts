@@ -2,15 +2,18 @@ import { Logger } from '@nestjs/common';
 import { IPaymentParser } from '../parser.interface';
 import { IAIProvider } from '../providers/ai-provider.interface';
 import { ParsedTransaction } from '../../../common/dtos/parse-result.dto';
-import { Category } from '../../../common/enums/category.enum';
+import { Category, PaymentApp, TransactionType } from '../../../common/enums';
 import { applyCategoryOverrides } from '../category-overrides';
 
 export abstract class BaseParser implements IPaymentParser {
   protected readonly logger = new Logger(this.constructor.name);
 
-  abstract readonly appType: string;
-  abstract canParse(detectedApp: string): boolean;
+  abstract readonly appType: PaymentApp;
   abstract getPrompt(): string;
+
+  canParse(detectedApp: string): boolean {
+    return detectedApp.toLowerCase() === this.appType.toLowerCase();
+  }
 
   async parse(
     provider: IAIProvider,
@@ -69,7 +72,7 @@ Transaction Type Detection:
 
       return parsed.map((item: any) => ({
         date: item.date,
-        category: item.category || 'Others',
+        category: item.category || Category.TOPUP,
         expense: item.expense || item.description || '',
         price: item.total,
         quantity: 1,
@@ -77,9 +80,9 @@ Transaction Type Detection:
         payment: item.payment || this.appType,
         to: item.to || item.merchant || '',
         remarks: item.remarks,
-        status: item.status,
+        status: item.status || 'success',
         isValid: item.isValid !== false,
-        transactionType: item.transactionType || 'expense',
+        transactionType: item.transactionType || TransactionType.Expense,
       }));
     } catch (error) {
       this.logger.error(`Failed to parse JSON response: ${error.message}`);

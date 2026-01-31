@@ -1,11 +1,8 @@
 import { BaseParser } from './base.parser';
+import { PaymentApp } from '../../../common/enums';
 
 export class OVOParser extends BaseParser {
-  readonly appType = 'OVO';
-
-  canParse(detectedApp: string): boolean {
-    return detectedApp.toLowerCase() === 'ovo';
-  }
+  readonly appType = PaymentApp.OVO;
 
   getPrompt(): string {
     return `Extract OVO transaction history from this screenshot.

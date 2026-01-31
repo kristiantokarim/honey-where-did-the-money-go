@@ -3,6 +3,7 @@ import { transactionService } from '../services/transactions';
 import { useToast } from './ToastContext';
 import { getMonthRange } from '../utils/format';
 import type { Transaction, ParsedTransaction, DashboardItem } from '../types';
+import { Category } from '../types/enums';
 
 interface DateFilter {
   start: string;
@@ -10,7 +11,7 @@ interface DateFilter {
 }
 
 interface LedgerFilters {
-  category: string;
+  category: Category | '';
   by: string;
 }
 

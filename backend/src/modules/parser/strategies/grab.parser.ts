@@ -1,11 +1,8 @@
 import { BaseParser } from './base.parser';
+import { PaymentApp } from '../../../common/enums';
 
 export class GrabParser extends BaseParser {
-  readonly appType = 'Grab';
-
-  canParse(detectedApp: string): boolean {
-    return detectedApp.toLowerCase() === 'grab';
-  }
+  readonly appType = PaymentApp.Grab;
 
   getPrompt(): string {
     return `Extract Grab transaction history from this screenshot.

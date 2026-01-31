@@ -4,7 +4,7 @@ import { and, eq, gte, lte, desc, sql, inArray } from 'drizzle-orm';
 import { DATABASE_TOKEN } from '../../database/database.provider';
 import * as schema from '../../database/schema';
 import { transactions, Transaction, NewTransaction } from '../../database/schema';
-import { EXPENSE_TYPES, INCOME_TYPES } from '../../common/enums';
+import { EXPENSE_TYPES, INCOME_TYPES, TransactionType, LedgerMode, SortBy, PaymentApp } from '../../common/enums';
 
 @Injectable()
 export class TransactionsRepository {
@@ -45,7 +45,7 @@ export class TransactionsRepository {
     endDate: string,
     category?: string,
     by?: string,
-    sortBy?: string,
+    sortBy?: SortBy,
   ): Promise<Transaction[]> {
     const conditions = [
       gte(transactions.date, startDate),
@@ -60,7 +60,7 @@ export class TransactionsRepository {
     }
 
     const orderByColumn =
-      sortBy === 'total' ? desc(transactions.total) : desc(transactions.date);
+      sortBy === SortBy.Total ? desc(transactions.total) : desc(transactions.date);
 
     return await this.db
       .select()
@@ -160,8 +160,6 @@ export class TransactionsRepository {
     startDate: string,
     endDate: string,
   ): Promise<Array<{ name: string; total: number }>> {
-    const expenseTypesStr = EXPENSE_TYPES.map((t) => `'${t}'`).join(', ');
-
     const data = await this.db
       .select()
       .from(transactions)
@@ -169,7 +167,7 @@ export class TransactionsRepository {
         and(
           sql`${transactions.isExcluded} = false`,
           sql`${transactions.linkedTransferId} IS NULL`,
-          sql`${transactions.transactionType} IN (${sql.raw(expenseTypesStr)})`,
+          inArray(transactions.transactionType, [...EXPENSE_TYPES]),
           gte(transactions.date, startDate),
           lte(transactions.date, endDate),
         ),
@@ -191,7 +189,7 @@ export class TransactionsRepository {
   async getLedgerTotal(
     startDate: string,
     endDate: string,
-    mode: 'expenses_only' | 'net_total',
+    mode: LedgerMode,
     category?: string,
     by?: string,
   ): Promise<{ total: number }> {
@@ -209,9 +207,8 @@ export class TransactionsRepository {
       conditions.push(eq(transactions.by, by));
     }
 
-    if (mode === 'expenses_only') {
-      const expenseTypesStr = EXPENSE_TYPES.map((t) => `'${t}'`).join(', ');
-      conditions.push(sql`${transactions.transactionType} IN (${sql.raw(expenseTypesStr)})`);
+    if (mode === LedgerMode.ExpensesOnly) {
+      conditions.push(inArray(transactions.transactionType, [...EXPENSE_TYPES]));
 
       const result = await this.db
         .select({ total: sql<number>`COALESCE(SUM(${transactions.total}), 0)` })
@@ -219,37 +216,41 @@ export class TransactionsRepository {
         .where(and(...conditions));
 
       return { total: Number(result[0]?.total ?? 0) };
-    } else {
-      // net_total mode: expenses - income
-      const expenseTypesStr = EXPENSE_TYPES.map((t) => `'${t}'`).join(', ');
-      const incomeTypesStr = INCOME_TYPES.map((t) => `'${t}'`).join(', ');
-
-      const result = await this.db
-        .select({
-          total: sql<number>`COALESCE(
-            SUM(CASE WHEN ${transactions.transactionType} IN (${sql.raw(expenseTypesStr)}) THEN ${transactions.total} ELSE 0 END) -
-            SUM(CASE WHEN ${transactions.transactionType} IN (${sql.raw(incomeTypesStr)}) THEN ${transactions.total} ELSE 0 END),
-            0
-          )`,
-        })
-        .from(transactions)
-        .where(and(...conditions));
-
-      return { total: Number(result[0]?.total ?? 0) };
     }
+
+    // net_total mode: expenses - income
+    // Fetch both expense and income transactions and compute in code
+    const expenseConditions = [...conditions, inArray(transactions.transactionType, [...EXPENSE_TYPES])];
+    const incomeConditions = [...conditions, inArray(transactions.transactionType, [...INCOME_TYPES])];
+
+    const [expenseResult, incomeResult] = await Promise.all([
+      this.db
+        .select({ total: sql<number>`COALESCE(SUM(${transactions.total}), 0)` })
+        .from(transactions)
+        .where(and(...expenseConditions)),
+      this.db
+        .select({ total: sql<number>`COALESCE(SUM(${transactions.total}), 0)` })
+        .from(transactions)
+        .where(and(...incomeConditions)),
+    ]);
+
+    const expenseTotal = Number(expenseResult[0]?.total ?? 0);
+    const incomeTotal = Number(incomeResult[0]?.total ?? 0);
+
+    return { total: expenseTotal - incomeTotal };
   }
 
   async findPotentialTransferMatches(
-    items: Array<{ transactionType: string; total: number; date: string; payment: string }>,
+    items: Array<{ transactionType: TransactionType; total: number; date: string; payment: PaymentApp }>,
   ): Promise<Array<{ index: number; match: Transaction | null }>> {
     return await Promise.all(
       items.map(async (item, index) => {
         // Only check for transfers
-        if (!['transfer_out', 'transfer_in'].includes(item.transactionType)) {
+        if (item.transactionType !== TransactionType.TransferOut && item.transactionType !== TransactionType.TransferIn) {
           return { index, match: null };
         }
 
-        const oppositeType = item.transactionType === 'transfer_out' ? 'transfer_in' : 'transfer_out';
+        const oppositeType = item.transactionType === TransactionType.TransferOut ? TransactionType.TransferIn : TransactionType.TransferOut;
 
         // Parse the date to check ±1 day
         const itemDate = new Date(item.date);
@@ -289,32 +290,22 @@ export class TransactionsRepository {
   async linkTransfers(id1: number, id2: number): Promise<void> {
     await this.db
       .update(transactions)
-      .set({ linkedTransferId: id2 })
-      .where(eq(transactions.id, id1));
-
-    await this.db
-      .update(transactions)
-      .set({ linkedTransferId: id1 })
-      .where(eq(transactions.id, id2));
+      .set({
+        linkedTransferId: sql`CASE
+          WHEN ${transactions.id} = ${id1} THEN ${id2}
+          ELSE ${id1}
+        END`,
+      })
+      .where(inArray(transactions.id, [id1, id2]));
   }
 
   async unlinkTransfer(id: number): Promise<void> {
     const transaction = await this.findById(id);
-    if (!transaction || !transaction.linkedTransferId) {
-      return;
-    }
-
-    const partnerId = transaction.linkedTransferId;
-
-    // Clear both sides
-    await this.db
-      .update(transactions)
-      .set({ linkedTransferId: null })
-      .where(eq(transactions.id, id));
+    if (!transaction?.linkedTransferId) return;
 
     await this.db
       .update(transactions)
       .set({ linkedTransferId: null })
-      .where(eq(transactions.id, partnerId));
+      .where(inArray(transactions.id, [id, transaction.linkedTransferId]));
   }
 }

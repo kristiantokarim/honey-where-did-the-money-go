@@ -1,11 +1,8 @@
 import { BaseParser } from './base.parser';
+import { PaymentApp } from '../../../common/enums';
 
 export class DanaParser extends BaseParser {
-  readonly appType = 'Dana';
-
-  canParse(detectedApp: string): boolean {
-    return detectedApp.toLowerCase() === 'dana';
-  }
+  readonly appType = PaymentApp.Dana;
 
   getPrompt(): string {
     return `Extract Dana transaction history from this screenshot.

@@ -2,13 +2,22 @@ import { Injectable, Logger, BadRequestException, NotFoundException } from '@nes
 import { TransactionsRepository } from './transactions.repository';
 import { ParserService } from '../parser/parser.service';
 import { StorageService } from '../storage/storage.service';
-import { CreateTransactionDto, UpdateTransactionDto } from '../../common/dtos/transaction.dto';
+import { CreateTransactionDto, UpdateTransactionDto, DateRangeQueryDto, LedgerTotalQueryDto } from '../../common/dtos/transaction.dto';
 import { ParsedTransaction } from '../../common/dtos/parse-result.dto';
 import { Transaction, NewTransaction } from '../../database/schema';
+import { PaymentApp, TransactionType } from '../../common/enums';
 
 @Injectable()
 export class TransactionsService {
   private readonly logger = new Logger(TransactionsService.name);
+
+  private async findByIdOrThrow(id: number): Promise<Transaction> {
+    const transaction = await this.repository.findById(id);
+    if (!transaction) {
+      throw new NotFoundException(`Transaction with id ${id} not found`);
+    }
+    return transaction;
+  }
 
   constructor(
     private readonly repository: TransactionsRepository,
@@ -20,9 +29,9 @@ export class TransactionsService {
     file: Buffer,
     mimeType: string,
     originalFilename: string,
-    appType?: string,
+    appType?: PaymentApp,
   ): Promise<{
-    appType: string;
+    appType: PaymentApp;
     transactions: ParsedTransaction[];
     imageUrl: string;
   }> {
@@ -46,7 +55,7 @@ export class TransactionsService {
   }
 
   async checkTransferMatches(
-    items: Array<{ transactionType: string; total: number; date: string; payment: string }>,
+    items: Array<{ transactionType: TransactionType; total: number; date: string; payment: PaymentApp }>,
   ): Promise<Array<{ index: number; match: Transaction | null }>> {
     return this.repository.findPotentialTransferMatches(items);
   }
@@ -78,12 +87,9 @@ export class TransactionsService {
   }
 
   async getHistory(
-    startDate: string,
-    endDate: string,
-    category?: string,
-    by?: string,
-    sortBy?: string,
+    query: DateRangeQueryDto,
   ): Promise<Array<Transaction & { linkedTransaction?: Transaction }>> {
+    const { startDate, endDate, category, by, sortBy } = query;
     const transactions = await this.repository.findByDateRange(startDate, endDate, category, by, sortBy);
 
     // Collect all linked transaction IDs that need to be fetched
@@ -114,20 +120,14 @@ export class TransactionsService {
   }
 
   async getLedgerTotal(
-    startDate: string,
-    endDate: string,
-    mode: 'expenses_only' | 'net_total',
-    category?: string,
-    by?: string,
+    query: LedgerTotalQueryDto,
   ): Promise<{ total: number }> {
+    const { startDate, endDate, mode, category, by } = query;
     return this.repository.getLedgerTotal(startDate, endDate, mode, category, by);
   }
 
   async update(id: number, data: UpdateTransactionDto): Promise<Transaction> {
-    const existing = await this.repository.findById(id);
-    if (!existing) {
-      throw new NotFoundException(`Transaction with id ${id} not found`);
-    }
+    const existing = await this.findByIdOrThrow(id);
 
     // Sync total to price for consistency
     const updateData: Partial<NewTransaction> = { ...data };
@@ -144,10 +144,7 @@ export class TransactionsService {
   }
 
   async delete(id: number): Promise<void> {
-    const existing = await this.repository.findById(id);
-    if (!existing) {
-      throw new NotFoundException(`Transaction with id ${id} not found`);
-    }
+    const existing = await this.findByIdOrThrow(id);
 
     // Clear partner's link if this transaction was linked
     if (existing.linkedTransferId) {
@@ -158,10 +155,7 @@ export class TransactionsService {
   }
 
   async unlinkTransfer(id: number): Promise<void> {
-    const existing = await this.repository.findById(id);
-    if (!existing) {
-      throw new NotFoundException(`Transaction with id ${id} not found`);
-    }
+    const existing = await this.findByIdOrThrow(id);
 
     if (!existing.linkedTransferId) {
       throw new BadRequestException('Transaction is not linked to any transfer');

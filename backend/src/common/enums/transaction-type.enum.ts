@@ -1,5 +1,10 @@
-export const EXPENSE_TYPES = ['expense', 'transfer_out'] as const;
-export const INCOME_TYPES = ['income', 'transfer_in'] as const;
+export enum TransactionType {
+  Expense = 'expense',
+  Income = 'income',
+  TransferOut = 'transfer_out',
+  TransferIn = 'transfer_in',
+}
 
-export type ExpenseType = (typeof EXPENSE_TYPES)[number];
-export type IncomeType = (typeof INCOME_TYPES)[number];
+// Helper arrays for filtering
+export const EXPENSE_TYPES = [TransactionType.Expense, TransactionType.TransferOut] as const;
+export const INCOME_TYPES = [TransactionType.Income, TransactionType.TransferIn] as const;

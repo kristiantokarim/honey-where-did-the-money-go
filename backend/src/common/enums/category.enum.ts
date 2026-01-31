@@ -13,6 +13,6 @@ export enum Category {
   TOPUP = 'Top-up',
   HOUSEHOLD = 'Household',
   ENTERTAINMENT = "Entertainment",
-  GADGET = "GADGET",
+  GADGET = "Gadget",
   WIFI = 'WiFi',
 }

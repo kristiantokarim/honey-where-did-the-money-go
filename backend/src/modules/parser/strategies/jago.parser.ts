@@ -1,11 +1,8 @@
 import { BaseParser } from './base.parser';
+import { PaymentApp } from '../../../common/enums';
 
 export class JagoParser extends BaseParser {
-  readonly appType = 'Jago';
-
-  canParse(detectedApp: string): boolean {
-    return detectedApp.toLowerCase() === 'jago';
-  }
+  readonly appType = PaymentApp.Jago;
 
   getPrompt(): string {
     return `Extract Bank Jago transaction history from this screenshot.

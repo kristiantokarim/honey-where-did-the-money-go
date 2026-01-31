@@ -1,7 +1,8 @@
 import { BaseParser } from './base.parser';
+import { PaymentApp } from '../../../common/enums';
 
 export class DanamonParser extends BaseParser {
-  readonly appType = 'Danamon';
+  readonly appType = PaymentApp.Danamon;
 
   canParse(detectedApp: string): boolean {
     return detectedApp.toLowerCase() === 'danamon' ||

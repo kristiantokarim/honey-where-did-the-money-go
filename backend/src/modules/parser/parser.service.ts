@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ParserFactory } from './parser.factory';
 import { AIProviderFactory } from './providers';
 import { ParsedTransaction } from '../../common/dtos/parse-result.dto';
+import { PaymentApp } from '../../common/enums';
 
 @Injectable()
 export class ParserService {
@@ -15,9 +16,9 @@ export class ParserService {
   async parseImage(
     fileBuffer: Buffer,
     mimeType: string,
-    providedAppType?: string,
+    providedAppType?: PaymentApp,
   ): Promise<{
-    appType: string;
+    appType: PaymentApp;
     transactions: ParsedTransaction[];
   }> {
     const base64Data = fileBuffer.toString('base64');
@@ -25,7 +26,7 @@ export class ParserService {
 
     // Step 1: Use provided app type or detect it
     let appType: string;
-    if (providedAppType && providedAppType !== 'auto') {
+    if (providedAppType) {
       appType = providedAppType;
       this.logger.log(`Using provided app type: ${appType}`);
     } else {
@@ -63,7 +64,7 @@ export class ParserService {
     return (response.text || 'Unknown').trim();
   }
 
-  getSupportedApps(): string[] {
+  getSupportedApps(): PaymentApp[] {
     return this.parserFactory.getSupportedApps();
   }
 }

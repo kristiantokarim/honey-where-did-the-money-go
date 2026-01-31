@@ -1,11 +1,8 @@
 import { BaseParser } from './base.parser';
+import { PaymentApp } from '../../../common/enums';
 
 export class JeniusParser extends BaseParser {
-  readonly appType = 'Jenius';
-
-  canParse(detectedApp: string): boolean {
-    return detectedApp.toLowerCase() === 'jenius';
-  }
+  readonly appType = PaymentApp.Jenius;
 
   getPrompt(): string {
     return `Extract Jenius (BTPN) transaction history from this screenshot.

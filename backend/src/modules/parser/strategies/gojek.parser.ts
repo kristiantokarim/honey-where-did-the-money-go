@@ -1,11 +1,8 @@
 import { BaseParser } from './base.parser';
+import { PaymentApp } from '../../../common/enums';
 
 export class GojekParser extends BaseParser {
-  readonly appType = 'Gojek';
-
-  canParse(detectedApp: string): boolean {
-    return detectedApp.toLowerCase() === 'gojek';
-  }
+  readonly appType = PaymentApp.Gojek;
 
   getPrompt(): string {
     return `Extract Gojek transaction history from this screenshot.

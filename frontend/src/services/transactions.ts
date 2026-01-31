@@ -1,8 +1,9 @@
 import { api } from './api';
 import type { Transaction, ParsedTransaction, DashboardItem, ParseResult } from '../types';
+import { Category, PaymentApp, TransactionType, LedgerMode, SortBy } from '../types/enums';
 
 export const transactionService = {
-  upload: async (file: File, appType?: string): Promise<ParseResult> => {
+  upload: async (file: File, appType?: PaymentApp): Promise<ParseResult> => {
     const formData = new FormData();
     formData.append('file', file);
     if (appType) {
@@ -23,7 +24,7 @@ export const transactionService = {
   },
 
   checkTransferMatches: async (
-    items: Array<{ transactionType: string; total: number; date: string; payment: string }>
+    items: Array<{ transactionType: TransactionType; total: number; date: string; payment: PaymentApp }>
   ): Promise<Array<{ index: number; match: Transaction | null }>> => {
     const response = await api.post<Array<{ index: number; match: Transaction | null }>>(
       '/transactions/check-transfer-matches',
@@ -45,9 +46,9 @@ export const transactionService = {
   getHistory: async (
     startDate: string,
     endDate: string,
-    category?: string,
+    category?: Category,
     by?: string,
-    sortBy?: string
+    sortBy?: SortBy
   ): Promise<Transaction[]> => {
     const params: Record<string, string> = { startDate, endDate };
     if (category) params.category = category;
@@ -73,8 +74,8 @@ export const transactionService = {
   getLedgerTotal: async (
     startDate: string,
     endDate: string,
-    mode: 'expenses_only' | 'net_total',
-    category?: string,
+    mode: LedgerMode,
+    category?: Category,
     by?: string
   ): Promise<{ total: number }> => {
     const params: Record<string, string> = { startDate, endDate, mode };

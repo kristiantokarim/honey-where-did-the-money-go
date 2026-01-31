@@ -8,6 +8,7 @@ import {
 import { transactionService } from '../services/transactions';
 import { useToast } from './ToastContext';
 import type { ParsedTransaction } from '../types';
+import { TransactionType, PaymentApp } from '../types/enums';
 
 type UploadStep = 'idle' | 'uploading' | 'detecting' | 'extracting' | 'checking' | 'complete' | 'error';
 
@@ -25,7 +26,7 @@ interface UploadContextValue {
   error: string | null;
 
   // Actions
-  startUpload: (file: File, appType: string | undefined, defaultUser: string) => Promise<void>;
+  startUpload: (file: File, appType: PaymentApp | undefined, defaultUser: string) => Promise<void>;
   clearResults: () => void;
   updateResult: (index: number, field: keyof ParsedTransaction, value: string | number | boolean) => void;
   removeResult: (index: number) => void;
@@ -60,7 +61,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   };
 
   const startUpload = useCallback(
-    async (file: File, appType: string | undefined, defaultUser: string) => {
+    async (file: File, appType: PaymentApp | undefined, defaultUser: string) => {
       // Clean up previous preview URL
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
@@ -96,7 +97,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           ),
           transactionService.checkTransferMatches(
             result.transactions.map((t) => ({
-              transactionType: t.transactionType || 'expense',
+              transactionType: t.transactionType,
               total: t.total,
               date: t.date,
               payment: t.payment,
