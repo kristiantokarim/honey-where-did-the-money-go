@@ -42,7 +42,7 @@ Return ONLY a JSON array with this exact structure: [{
   "date": "YYYY-MM-DD",
   "expense": "Item Name or Description",
   "to": "Merchant Name (e.g. Gojek, Indomaret)",
-  "category": "Food|Transport|Top-up|Bills|Insurance|Rent|Wifi|Others",
+  "category": "Rent|Insurance|Gift|Transport|Meals|Fashion|Healthcare|Trip|Skincare|Utilities|Groceries|Top-up",
   "total": number (Absolute value),
   "payment": "${this.appType}",
   "status": "string",
