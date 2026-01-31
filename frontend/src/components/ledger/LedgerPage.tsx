@@ -27,10 +27,35 @@ export function LedgerPage() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [unlinkingId, setUnlinkingId] = useState<number | null>(null);
   const [showNetTotal, setShowNetTotal] = useState(false);
+  const [ledgerTotal, setLedgerTotal] = useState<number>(0);
+  const [totalLoading, setTotalLoading] = useState(false);
 
   useEffect(() => {
     refreshHistory();
   }, [refreshHistory, dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by]);
+
+  useEffect(() => {
+    const fetchTotal = async () => {
+      setTotalLoading(true);
+      try {
+        const mode = showNetTotal ? 'net_total' : 'expenses_only';
+        const result = await transactionService.getLedgerTotal(
+          dateFilter.start,
+          dateFilter.end,
+          mode,
+          ledgerFilters.category || undefined,
+          ledgerFilters.by || undefined
+        );
+        setLedgerTotal(result.total);
+      } catch (error) {
+        console.error('Failed to fetch ledger total:', error);
+      } finally {
+        setTotalLoading(false);
+      }
+    };
+
+    fetchTotal();
+  }, [dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by, showNetTotal, historyData]);
 
   const handleSave = useCallback(
     async (tx: Transaction) => {
@@ -82,33 +107,6 @@ export function LedgerPage() {
     [updateLocalTransaction]
   );
 
-  // Calculate totals based on mode
-  const calculateTotal = () => {
-    const nonExcluded = historyData.filter((t) => !t.isExcluded);
-
-    if (showNetTotal) {
-      // Net total: expenses - income, excluding linked transfers (they cancel out)
-      return nonExcluded
-        .filter((t) => !t.linkedTransferId)
-        .reduce((sum, t) => {
-          if (t.transactionType === 'income' || t.transactionType === 'transfer_in') {
-            return sum - t.total; // Subtract income
-          }
-          return sum + t.total; // Add expenses and unlinked transfers
-        }, 0);
-    } else {
-      // Expense only: only count expense type, exclude linked transfers
-      return nonExcluded
-        .filter((t) =>
-          !t.linkedTransferId &&
-          (t.transactionType === 'expense' || t.transactionType === 'transfer_out' || !t.transactionType)
-        )
-        .reduce((sum, t) => sum + t.total, 0);
-    }
-  };
-
-  const effectiveTotal = calculateTotal();
-
   if (historyLoading && historyData.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -130,8 +128,8 @@ export function LedgerPage() {
         </button>
         <div className="text-right text-xs font-bold text-slate-400 uppercase tracking-widest">
           Total:{' '}
-          <span className={`font-black text-lg ml-1 ${effectiveTotal < 0 ? 'text-green-600' : 'text-slate-800'}`}>
-            {effectiveTotal < 0 ? '+' : ''}{formatIDR(Math.abs(effectiveTotal))}
+          <span className={`font-black text-lg ml-1 ${ledgerTotal < 0 ? 'text-green-600' : 'text-slate-800'}`}>
+            {totalLoading ? '...' : `${ledgerTotal < 0 ? '+' : ''}${formatIDR(Math.abs(ledgerTotal))}`}
           </span>
         </div>
       </div>

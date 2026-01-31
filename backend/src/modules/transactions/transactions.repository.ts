@@ -4,6 +4,7 @@ import { and, eq, gte, lte, desc, sql, inArray } from 'drizzle-orm';
 import { DATABASE_TOKEN } from '../../database/database.provider';
 import * as schema from '../../database/schema';
 import { transactions, Transaction, NewTransaction } from '../../database/schema';
+import { EXPENSE_TYPES, INCOME_TYPES } from '../../common/enums';
 
 @Injectable()
 export class TransactionsRepository {
@@ -159,14 +160,16 @@ export class TransactionsRepository {
     startDate: string,
     endDate: string,
   ): Promise<Array<{ name: string; total: number }>> {
+    const expenseTypesStr = EXPENSE_TYPES.map((t) => `'${t}'`).join(', ');
+
     const data = await this.db
       .select()
       .from(transactions)
       .where(
         and(
-            sql`${transactions.isExcluded} = false`,
-            sql`${transactions.linkedTransferId} IS NULL`,
-            sql`${transactions.transactionType} IN ('expense', 'transfer_out')`,
+          sql`${transactions.isExcluded} = false`,
+          sql`${transactions.linkedTransferId} IS NULL`,
+          sql`${transactions.transactionType} IN (${sql.raw(expenseTypesStr)})`,
           gte(transactions.date, startDate),
           lte(transactions.date, endDate),
         ),
@@ -183,6 +186,57 @@ export class TransactionsRepository {
     return Object.entries(categories)
       .map(([name, total]) => ({ name, total }))
       .sort((a, b) => b.total - a.total);
+  }
+
+  async getLedgerTotal(
+    startDate: string,
+    endDate: string,
+    mode: 'expenses_only' | 'net_total',
+    category?: string,
+    by?: string,
+  ): Promise<{ total: number }> {
+    const conditions = [
+      sql`${transactions.isExcluded} = false`,
+      sql`${transactions.linkedTransferId} IS NULL`,
+      gte(transactions.date, startDate),
+      lte(transactions.date, endDate),
+    ];
+
+    if (category) {
+      conditions.push(eq(transactions.category, category));
+    }
+    if (by) {
+      conditions.push(eq(transactions.by, by));
+    }
+
+    if (mode === 'expenses_only') {
+      const expenseTypesStr = EXPENSE_TYPES.map((t) => `'${t}'`).join(', ');
+      conditions.push(sql`${transactions.transactionType} IN (${sql.raw(expenseTypesStr)})`);
+
+      const result = await this.db
+        .select({ total: sql<number>`COALESCE(SUM(${transactions.total}), 0)` })
+        .from(transactions)
+        .where(and(...conditions));
+
+      return { total: Number(result[0]?.total ?? 0) };
+    } else {
+      // net_total mode: expenses - income
+      const expenseTypesStr = EXPENSE_TYPES.map((t) => `'${t}'`).join(', ');
+      const incomeTypesStr = INCOME_TYPES.map((t) => `'${t}'`).join(', ');
+
+      const result = await this.db
+        .select({
+          total: sql<number>`COALESCE(
+            SUM(CASE WHEN ${transactions.transactionType} IN (${sql.raw(expenseTypesStr)}) THEN ${transactions.total} ELSE 0 END) -
+            SUM(CASE WHEN ${transactions.transactionType} IN (${sql.raw(incomeTypesStr)}) THEN ${transactions.total} ELSE 0 END),
+            0
+          )`,
+        })
+        .from(transactions)
+        .where(and(...conditions));
+
+      return { total: Number(result[0]?.total ?? 0) };
+    }
   }
 
   async findPotentialTransferMatches(

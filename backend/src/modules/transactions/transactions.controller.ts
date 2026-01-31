@@ -20,6 +20,7 @@ import {
   DateRangeQueryDto,
   DuplicateCheckItemDto,
   CheckTransferMatchDto,
+  LedgerTotalQueryDto,
 } from '../../common/dtos/transaction.dto';
 
 @Controller('transactions')
@@ -73,6 +74,17 @@ export class TransactionsController {
   @Get('dashboard')
   async getDashboard(@Query() query: DateRangeQueryDto) {
     return this.transactionsService.getDashboard(query.startDate, query.endDate);
+  }
+
+  @Get('ledger-total')
+  async getLedgerTotal(@Query() query: LedgerTotalQueryDto) {
+    return this.transactionsService.getLedgerTotal(
+      query.startDate,
+      query.endDate,
+      query.mode,
+      query.category,
+      query.by,
+    );
   }
 
   @Put(':id')

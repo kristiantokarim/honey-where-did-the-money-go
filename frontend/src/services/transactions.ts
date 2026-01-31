@@ -70,6 +70,23 @@ export const transactionService = {
     return response.data;
   },
 
+  getLedgerTotal: async (
+    startDate: string,
+    endDate: string,
+    mode: 'expenses_only' | 'net_total',
+    category?: string,
+    by?: string
+  ): Promise<{ total: number }> => {
+    const params: Record<string, string> = { startDate, endDate, mode };
+    if (category) params.category = category;
+    if (by) params.by = by;
+
+    const response = await api.get<{ total: number }>('/transactions/ledger-total', {
+      params,
+    });
+    return response.data;
+  },
+
   update: async (
     id: number,
     data: Partial<Transaction>

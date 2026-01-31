@@ -113,6 +113,16 @@ export class TransactionsService {
     return this.repository.getDashboardData(startDate, endDate);
   }
 
+  async getLedgerTotal(
+    startDate: string,
+    endDate: string,
+    mode: 'expenses_only' | 'net_total',
+    category?: string,
+    by?: string,
+  ): Promise<{ total: number }> {
+    return this.repository.getLedgerTotal(startDate, endDate, mode, category, by);
+  }
+
   async update(id: number, data: UpdateTransactionDto): Promise<Transaction> {
     const existing = await this.repository.findById(id);
     if (!existing) {

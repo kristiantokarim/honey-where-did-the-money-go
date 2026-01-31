@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, IsBoolean, Min, IsDateString, IsArray, ValidateNested } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsBoolean, Min, IsDateString, IsArray, ValidateNested, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateTransactionDto {
@@ -162,4 +162,24 @@ export class CheckTransferMatchDto {
 
   @IsString()
   payment: string;
+}
+
+export class LedgerTotalQueryDto {
+  @IsDateString()
+  startDate: string;
+
+  @IsDateString()
+  endDate: string;
+
+  @IsString()
+  @IsIn(['expenses_only', 'net_total'])
+  mode: 'expenses_only' | 'net_total';
+
+  @IsString()
+  @IsOptional()
+  category?: string;
+
+  @IsString()
+  @IsOptional()
+  by?: string;
 }
