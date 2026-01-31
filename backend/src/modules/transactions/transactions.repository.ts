@@ -46,6 +46,7 @@ export class TransactionsRepository {
     category?: string,
     by?: string,
     sortBy?: SortBy,
+    payment?: PaymentApp,
   ): Promise<Transaction[]> {
     const conditions = [
       gte(transactions.date, startDate),
@@ -57,6 +58,9 @@ export class TransactionsRepository {
     }
     if (by) {
       conditions.push(eq(transactions.by, by));
+    }
+    if (payment) {
+      conditions.push(eq(transactions.payment, payment));
     }
 
     const orderByColumn =
@@ -165,20 +169,35 @@ export class TransactionsRepository {
   async getDashboardData(
     startDate: string,
     endDate: string,
+    by?: string,
+    payment?: PaymentApp,
   ): Promise<Array<{ name: string; total: number }>> {
+    const conditions = [
+      sql`${transactions.isExcluded} = false`,
+      inArray(transactions.transactionType, [...EXPENSE_TYPES]),
+      gte(transactions.date, startDate),
+      lte(transactions.date, endDate),
+    ];
+
+    // Only exclude linked transactions when NOT filtering by payment.
+    // When payment filter is active, double-counting is prevented by the filter itself
+    // (e.g., filtering by "Mandiri CC" excludes Grab transactions since payment != "Mandiri CC")
+    if (!payment) {
+      conditions.push(sql`${transactions.linkedTransferId} IS NULL`);
+      conditions.push(sql`${transactions.forwardedTransactionId} IS NULL`);
+    }
+
+    if (by) {
+      conditions.push(eq(transactions.by, by));
+    }
+    if (payment) {
+      conditions.push(eq(transactions.payment, payment));
+    }
+
     const data = await this.db
       .select()
       .from(transactions)
-      .where(
-        and(
-          sql`${transactions.isExcluded} = false`,
-          sql`${transactions.linkedTransferId} IS NULL`,
-          sql`${transactions.forwardedTransactionId} IS NULL`,
-          inArray(transactions.transactionType, [...EXPENSE_TYPES]),
-          gte(transactions.date, startDate),
-          lte(transactions.date, endDate),
-        ),
-      );
+      .where(and(...conditions));
 
     const categories = data.reduce(
       (acc, curr) => {
@@ -199,20 +218,30 @@ export class TransactionsRepository {
     mode: LedgerMode,
     category?: string,
     by?: string,
+    payment?: PaymentApp,
   ): Promise<{ total: number }> {
     const conditions = [
       sql`${transactions.isExcluded} = false`,
-      sql`${transactions.linkedTransferId} IS NULL`,
-      sql`${transactions.forwardedTransactionId} IS NULL`,
       gte(transactions.date, startDate),
       lte(transactions.date, endDate),
     ];
+
+    // Only exclude linked transactions when NOT filtering by payment.
+    // When payment filter is active, double-counting is prevented by the filter itself
+    // (e.g., filtering by "Mandiri CC" excludes Grab transactions since payment != "Mandiri CC")
+    if (!payment) {
+      conditions.push(sql`${transactions.linkedTransferId} IS NULL`);
+      conditions.push(sql`${transactions.forwardedTransactionId} IS NULL`);
+    }
 
     if (category) {
       conditions.push(eq(transactions.category, category));
     }
     if (by) {
       conditions.push(eq(transactions.by, by));
+    }
+    if (payment) {
+      conditions.push(eq(transactions.payment, payment));
     }
 
     if (mode === LedgerMode.ExpensesOnly) {
