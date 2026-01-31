@@ -324,17 +324,17 @@ export class TransactionsRepository {
     );
   }
 
-  async linkTransfers(id1: number, id2: number): Promise<void> {
-    await this.db
-      .update(transactions)
-      .set({
-        linkedTransferId: sql`CASE
-          WHEN ${transactions.id} = ${id1} THEN ${id2}
-          ELSE ${id1}
-        END`,
-      })
-      .where(inArray(transactions.id, [id1, id2]));
-  }
+    async linkTransfers(id1: number, id2: number): Promise<void> {
+        await this.db
+            .update(transactions)
+            .set({
+                linkedTransferId: sql`CASE
+        WHEN ${transactions.id} = ${id1} THEN ${id2}::int
+                ELSE ${id1}::int
+                END`,
+            })
+            .where(inArray(transactions.id, [id1, id2]));
+    }
 
   async unlinkTransfer(id: number): Promise<void> {
     const transaction = await this.findById(id);
