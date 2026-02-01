@@ -68,6 +68,8 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<ParsedTransaction[]>([]);
   const [error, setError] = useState<string | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionRef = useRef<ScanSession | null>(null);
+  const stepRef = useRef<SessionStep>('idle');
 
   const stopPolling = useCallback(() => {
     if (pollIntervalRef.current) {
@@ -106,11 +108,13 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
   );
 
   const pollSession = useCallback(async () => {
-    if (!session) return;
+    const currentSession = sessionRef.current;
+    if (!currentSession) return;
 
     try {
-      const updatedSession = await scanSessionService.getSession(session.sessionId);
+      const updatedSession = await scanSessionService.getSession(currentSession.sessionId);
       setSession(updatedSession);
+      sessionRef.current = updatedSession;
 
       const allParsed = updatedSession.pages.every(
         (p) =>
@@ -118,14 +122,16 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
           p.parseStatus === ParseStatus.Failed,
       );
 
-      if (allParsed) {
-        stopPolling();
+      const currentIdx = updatedSession.currentPageIndex;
+      const currentPageStatus = updatedSession.pages[currentIdx];
+      const currentPageReady =
+        currentPageStatus?.parseStatus === ParseStatus.Completed ||
+        currentPageStatus?.parseStatus === ParseStatus.Failed;
 
-        const currentIdx = updatedSession.currentPageIndex;
-        const currentPageStatus = updatedSession.pages[currentIdx];
-
-        if (currentPageStatus?.parseStatus === ParseStatus.Completed) {
+      if (currentPageReady && stepRef.current === 'parsing') {
+        if (currentPageStatus.parseStatus === ParseStatus.Completed) {
           setStep('reviewing');
+          stepRef.current = 'reviewing';
           const pageData = await scanSessionService.getPageForReview(
             updatedSession.sessionId,
             currentIdx,
@@ -134,17 +140,22 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
           setTransactions(
             enrichTransactions(pageData.transactions, pageData.imageUrl),
           );
-        } else if (currentPageStatus?.parseStatus === ParseStatus.Failed) {
+        } else {
           setError(
             currentPageStatus.parseError || 'Failed to parse current page',
           );
           setStep('error');
+          stepRef.current = 'error';
         }
+      }
+
+      if (allParsed) {
+        stopPolling();
       }
     } catch (err) {
       console.error('Poll failed:', err);
     }
-  }, [session, stopPolling, enrichTransactions]);
+  }, [stopPolling, enrichTransactions]);
 
   const startPolling = useCallback(() => {
     stopPolling();
@@ -159,6 +170,7 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
     async (files: File[]) => {
       setError(null);
       setStep('uploading');
+      stepRef.current = 'uploading';
 
       try {
         const newSession = await scanSessionService.createSession(
@@ -167,7 +179,9 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
         );
 
         setSession(newSession);
+        sessionRef.current = newSession;
         setStep('parsing');
+        stepRef.current = 'parsing';
         showToast(`Uploading ${files.length} image(s)...`, 'success');
 
         startPolling();
@@ -175,6 +189,7 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
         console.error('Create session failed:', err);
         setError(err instanceof Error ? err.message : 'Failed to create session');
         setStep('error');
+        stepRef.current = 'error';
         showToast('Failed to start scan session', 'error');
       }
     },
@@ -195,6 +210,7 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
       }
 
       setSession(activeSession);
+      sessionRef.current = activeSession;
 
       const hasPendingParsing = activeSession.pages.some(
         (p) =>
@@ -204,6 +220,7 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
 
       if (hasPendingParsing) {
         setStep('parsing');
+        stepRef.current = 'parsing';
         startPolling();
       } else {
         const currentIdx = activeSession.currentPageIndex;
@@ -211,6 +228,7 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
 
         if (currentPageStatus?.parseStatus === ParseStatus.Completed) {
           setStep('reviewing');
+          stepRef.current = 'reviewing';
           const pageData = await scanSessionService.getPageForReview(
             activeSession.sessionId,
             currentIdx,
@@ -222,6 +240,7 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
         } else if (currentPageStatus?.parseStatus === ParseStatus.Failed) {
           setError(currentPageStatus.parseError || 'Failed to parse page');
           setStep('error');
+          stepRef.current = 'error';
         }
       }
 
@@ -246,10 +265,12 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
           enrichTransactions(pageData.transactions, pageData.imageUrl),
         );
         setStep('reviewing');
+        stepRef.current = 'reviewing';
       } catch (err) {
         console.error('Load page failed:', err);
         setError(err instanceof Error ? err.message : 'Failed to load page');
         setStep('error');
+        stepRef.current = 'error';
       }
     },
     [session, enrichTransactions],
@@ -274,6 +295,7 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
 
     try {
       setStep('confirming');
+      stepRef.current = 'confirming';
       const result = await scanSessionService.confirmPage(
         session.sessionId,
         currentPage.pageIndex,
@@ -291,7 +313,9 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
 
       if (result.sessionCompleted) {
         setStep('completed');
+        stepRef.current = 'completed';
         setSession(null);
+        sessionRef.current = null;
         setCurrentPage(null);
         setTransactions([]);
       } else if (result.nextPageIndex !== null) {
@@ -299,12 +323,14 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
           session.sessionId,
         );
         setSession(updatedSession);
+        sessionRef.current = updatedSession;
         await loadPageForReview(result.nextPageIndex);
       }
     } catch (err) {
       console.error('Confirm page failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to confirm page');
       setStep('error');
+      stepRef.current = 'error';
       showToast('Failed to save transactions', 'error');
     }
   }, [session, currentPage, transactions, showToast, loadPageForReview]);
@@ -316,6 +342,7 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
       const result = await scanSessionService.retryParse(session.sessionId);
       showToast(result.message, 'success');
       setStep('parsing');
+      stepRef.current = 'parsing';
       startPolling();
     } catch (err) {
       console.error('Retry parse failed:', err);
@@ -332,9 +359,11 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
       stopPolling();
       await scanSessionService.cancelSession(session.sessionId);
       setSession(null);
+      sessionRef.current = null;
       setCurrentPage(null);
       setTransactions([]);
       setStep('idle');
+      stepRef.current = 'idle';
       setError(null);
       showToast('Session cancelled', 'success');
     } catch (err) {
