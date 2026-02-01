@@ -120,8 +120,12 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 ## Features
 
 ### Transaction History Scanning (Scan Tab)
-- Upload transaction history screenshots from Indonesian e-money apps
+- Multi-page batch uploads with session management
 - AI-powered parsing using Google Gemini API
+- Background queue processing (3 concurrent)
+- Automatic retry with backoff for failed parsing
+- Stale processing recovery (stuck jobs >60s are auto-recovered)
+- 48-hour session expiration with automatic cleanup
 - Auto-detects payment app type: **Gojek, OVO, BCA, Grab, Dana, Jenius, Jago, Danamon** (or manual selection)
 - Extracts transaction details: date, amount, merchant, category
 - **Transaction type detection**: AI classifies as expense, income, transfer_out, or transfer_in
@@ -177,15 +181,23 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 
 ---
 
-## API Endpoints
+## Scan Session API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/transactions/upload` | Upload & parse receipt image |
-| POST | `/transactions/check-duplicates` | Check for duplicate transactions |
-| POST | `/transactions/check-transfer-matches` | Find matching transfers in database |
-| POST | `/transactions/confirm` | Save scanned transactions to database |
-| GET | `/transactions/history` | Fetch transactions with date range |
+| POST | `/scan/sessions` | Create session with uploaded images |
+| GET | `/scan/sessions/active?user=` | Get user's active session |
+| GET | `/scan/sessions/:id` | Get session status |
+| GET | `/scan/sessions/:id/pages/:index` | Get page for review |
+| POST | `/scan/sessions/:id/pages/:index/confirm` | Confirm page transactions |
+| POST | `/scan/sessions/:id/retry-parse` | Retry failed/stuck parsing |
+| DELETE | `/scan/sessions/:id` | Cancel and cleanup session |
+
+## Transaction API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/transactions/history` | Fetch transactions with filters |
 | GET | `/transactions/dashboard` | Get spending summary by category |
 | PUT | `/transactions/:id` | Update a transaction |
 | DELETE | `/transactions/:id` | Delete a transaction |
