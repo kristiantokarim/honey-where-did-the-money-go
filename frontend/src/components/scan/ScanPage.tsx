@@ -1,44 +1,47 @@
-import { useState, useCallback, type ChangeEvent } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Loader2 } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
-import { useToast } from '../../context/ToastContext';
-import { useUpload } from '../../context/UploadContext';
+import { useScanSession } from '../../context/ScanSessionContext';
 import { useImagePreview } from '../../hooks/useImagePreview';
-import { transactionService } from '../../services/transactions';
-import { FileUpload } from './FileUpload';
+import { MultiFileUpload } from './MultiFileUpload';
 import { ImagePreview } from './ImagePreview';
 import { TransactionItem } from './TransactionItem';
+import { PageNavigation } from './PageNavigation';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { ImageLightbox } from '../common/ImageLightbox';
-import { UploadProgress } from './UploadProgress';
 import type { ParsedTransaction } from '../../types';
+import { ParseStatus } from '../../types/enums';
 
 export function ScanPage() {
   const navigate = useNavigate();
   const { config, defaultUser, setDefaultUser } = useAppContext();
-  const { showToast } = useToast();
   const {
-    isUploading,
-    progress,
-    results,
-    previewUrl,
-    startUpload,
-    clearResults,
-    updateResult,
-    removeResult,
+    step,
+    session,
+    currentPage,
+    transactions,
+    error,
+    createSession,
+    loadActiveSession,
+    confirmCurrentPage,
+    retryParse,
+    cancelSession,
+    updateTransaction,
+    removeTransaction,
     toggleDuplicate,
     toggleKeepSeparate,
     selectForwardedMatch,
     toggleSkipForwardedMatch,
     selectReverseCcMatch,
     toggleSkipReverseCcMatch,
-  } = useUpload();
+  } = useScanSession();
 
-  const [selectedApp, setSelectedApp] = useState('auto');
   const [removingIndex, setRemovingIndex] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
   const [matchImageUrl, setMatchImageUrl] = useState<string | null>(null);
+  const [matchImageZoomed, setMatchImageZoomed] = useState(false);
+  const [isLoadingSession, setIsLoadingSession] = useState(true);
+  const initializedForUser = useRef<string | null>(null);
 
   const {
     showImage,
@@ -48,25 +51,31 @@ export function ScanPage() {
     closeZoom,
   } = useImagePreview();
 
-  // Separate state for viewing matched transaction's image
-  const [matchImageZoomed, setMatchImageZoomed] = useState(false);
+  useEffect(() => {
+    if (!defaultUser) return;
+    if (initializedForUser.current === defaultUser) return;
+    initializedForUser.current = defaultUser;
 
-  const handleFileUpload = useCallback(
-    async (e: ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+    const checkActiveSession = async () => {
+      setIsLoadingSession(true);
+      await loadActiveSession(defaultUser);
+      setIsLoadingSession(false);
+    };
+    checkActiveSession();
+  }, [defaultUser, loadActiveSession]);
 
-      const appType = selectedApp === 'auto' ? undefined : selectedApp;
-      await startUpload(file, appType, defaultUser);
+  const handleFilesSelect = useCallback(
+    async (files: File[]) => {
+      await createSession(files);
     },
-    [defaultUser, selectedApp, startUpload]
+    [createSession],
   );
 
   const handleRemoveConfirm = useCallback(() => {
     if (removingIndex === null) return;
-    removeResult(removingIndex);
+    removeTransaction(removingIndex);
     setRemovingIndex(null);
-  }, [removingIndex, removeResult]);
+  }, [removingIndex, removeTransaction]);
 
   const isSaveable = (tx: ParsedTransaction) => {
     if (tx.isDuplicate) return false;
@@ -74,155 +83,239 @@ export function ScanPage() {
     return true;
   };
 
-  const handleSave = useCallback(async () => {
-    const itemsToSave = results.filter(isSaveable).map((item) => ({
-      ...item,
-      // Include reverse CC match ID for linking (handled transactionally by backend)
-      reverseCcMatchId: item.reverseCcMatch && !item.skipReverseCcMatch
-        ? item.reverseCcMatch.id
-        : undefined,
-    }));
-    if (!itemsToSave.length) return;
-
-    try {
-      setSaving(true);
-
-      // Single API call - backend handles all linking transactionally
-      await transactionService.confirm(itemsToSave);
-
-      showToast(`Saved ${itemsToSave.length} transaction(s)`, 'success');
-      clearResults();
+  const handleConfirmPage = useCallback(async () => {
+    await confirmCurrentPage();
+    if (step === 'completed') {
       navigate({ to: '/ledger' });
-    } catch (error) {
-      console.error('Save failed:', error);
-      showToast('Failed to save transactions. Please try again.', 'error');
-    } finally {
-      setSaving(false);
     }
-  }, [results, clearResults, navigate, showToast]);
+  }, [confirmCurrentPage, step, navigate]);
 
-  const validCount = results.filter(isSaveable).length;
+  const validCount = transactions.filter(isSaveable).length;
 
-  // Show upload progress when uploading
-  if (isUploading) {
-    return <UploadProgress step={progress.step} message={progress.message} />;
+  if (isLoadingSession) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="animate-spin text-blue-500" size={32} />
+      </div>
+    );
   }
 
-  return (
-    <div className="space-y-4">
-      {results.length > 0 && (
+  if (step === 'uploading') {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <Loader2 className="animate-spin text-blue-500" size={32} />
+        <p className="text-slate-600 font-medium">Uploading images...</p>
+      </div>
+    );
+  }
+
+  if (step === 'parsing' && session) {
+    const hasFailedPages = session.pages.some(
+      (p) => p.parseStatus === ParseStatus.Failed,
+    );
+
+    return (
+      <div className="space-y-4">
+        <PageNavigation
+          pages={session.pages}
+          currentPageIndex={session.currentPageIndex}
+          totalPages={session.totalPages}
+          parsedPages={session.parsedPages}
+          defaultUser={defaultUser}
+        />
+
+        <div className="flex flex-col items-center justify-center h-48 space-y-4">
+          <Loader2 className="animate-spin text-blue-500" size={32} />
+          <p className="text-slate-600 font-medium">
+            Processing {session.totalPages} page(s)...
+          </p>
+          <p className="text-slate-500 text-sm">
+            {session.parsedPages} of {session.totalPages} parsed
+          </p>
+          <p className="text-slate-500 text-sm">
+            Recording as: {defaultUser}
+          </p>
+        </div>
+
+        {hasFailedPages && (
+          <button
+            onClick={retryParse}
+            className="w-full flex items-center justify-center gap-2 bg-amber-100 text-amber-800 py-3 rounded-xl font-medium"
+          >
+            <RefreshCw size={16} />
+            Retry Failed Pages
+          </button>
+        )}
+
+        <button
+          onClick={cancelSession}
+          className="w-full py-3 rounded-xl font-medium text-slate-500 hover:text-slate-700"
+        >
+          Cancel Session
+        </button>
+      </div>
+    );
+  }
+
+  if (step === 'error') {
+    return (
+      <div className="space-y-4">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center">
+          <p className="text-red-700 font-medium">
+            {error || 'Something went wrong'}
+          </p>
+        </div>
+
+        {session && (
+          <button
+            onClick={retryParse}
+            className="w-full flex items-center justify-center gap-2 bg-amber-100 text-amber-800 py-3 rounded-xl font-medium"
+          >
+            <RefreshCw size={16} />
+            Retry Parsing
+          </button>
+        )}
+
+        <button
+          onClick={cancelSession}
+          className="w-full py-3 rounded-xl font-medium text-slate-500 hover:text-slate-700"
+        >
+          Cancel Session
+        </button>
+      </div>
+    );
+  }
+
+  if (step === 'reviewing' && session && currentPage) {
+    return (
+      <div className="space-y-4">
         <div className="flex justify-between items-center">
           <button
-            onClick={clearResults}
+            onClick={cancelSession}
             className="flex items-center gap-2 text-slate-500 font-semibold hover:text-slate-700 transition-colors"
           >
             <ArrowLeft size={16} />
-            New Scan
+            Cancel
           </button>
         </div>
-      )}
 
-      {previewUrl && results.length > 0 && (
+        <PageNavigation
+          pages={session.pages}
+          currentPageIndex={currentPage.pageIndex}
+          totalPages={session.totalPages}
+          parsedPages={session.parsedPages}
+          defaultUser={defaultUser}
+        />
+
         <ImagePreview
-          imageUrl={previewUrl}
+          imageUrl={currentPage.imageUrl}
           showImage={showImage}
           isZoomed={isZoomed}
           onToggle={toggleImage}
           onZoom={openZoom}
           onCloseZoom={closeZoom}
         />
-      )}
 
-      {results.map((tx, i) => (
-        <TransactionItem
-          key={i}
-          transaction={tx}
-          index={i}
-          onUpdate={updateResult}
-          onRemove={setRemovingIndex}
-          onToggleDuplicate={toggleDuplicate}
-          onToggleKeepSeparate={toggleKeepSeparate}
-          onSelectForwardedMatch={selectForwardedMatch}
-          onToggleSkipForwardedMatch={toggleSkipForwardedMatch}
-          onSelectReverseCcMatch={selectReverseCcMatch}
-          onToggleSkipReverseCcMatch={toggleSkipReverseCcMatch}
-          onViewImage={(url) => {
-            setMatchImageUrl(url);
-            setMatchImageZoomed(true);
-          }}
-        />
-      ))}
+        {transactions.map((tx, i) => (
+          <TransactionItem
+            key={i}
+            transaction={tx}
+            index={i}
+            onUpdate={updateTransaction}
+            onRemove={setRemovingIndex}
+            onToggleDuplicate={toggleDuplicate}
+            onToggleKeepSeparate={toggleKeepSeparate}
+            onSelectForwardedMatch={selectForwardedMatch}
+            onToggleSkipForwardedMatch={toggleSkipForwardedMatch}
+            onSelectReverseCcMatch={selectReverseCcMatch}
+            onToggleSkipReverseCcMatch={toggleSkipReverseCcMatch}
+            onViewImage={(url) => {
+              setMatchImageUrl(url);
+              setMatchImageZoomed(true);
+            }}
+          />
+        ))}
 
-      {results.length === 0 ? (
-        <div className="space-y-4">
-          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-slate-600 mb-2">
-                Record as
-              </label>
-              <select
-                className="w-full bg-slate-50 text-base font-bold p-3 rounded-xl border-none outline-none min-h-[48px]"
-                style={{ fontSize: '16px' }}
-                value={defaultUser}
-                onChange={(e) => setDefaultUser(e.target.value)}
-              >
-                {config?.users.map((user) => (
-                  <option key={user} value={user}>
-                    {user}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-600 mb-2">
-                Payment App
-              </label>
-              <select
-                className="w-full bg-slate-50 text-base font-bold p-3 rounded-xl border-none outline-none min-h-[48px]"
-                style={{ fontSize: '16px' }}
-                value={selectedApp}
-                onChange={(e) => setSelectedApp(e.target.value)}
-              >
-                <option value="auto">Auto-detect</option>
-                {config?.paymentMethods.map((method) => (
-                  <option key={method} value={method}>
-                    {method}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <FileUpload loading={false} onFileSelect={handleFileUpload} />
-        </div>
-      ) : (
         <button
-          onClick={handleSave}
-          disabled={saving || validCount === 0}
+          onClick={handleConfirmPage}
+          disabled={step === 'confirming'}
           className="w-full bg-slate-900 py-4 rounded-2xl font-bold text-white shadow-xl min-h-[56px] disabled:opacity-50"
         >
-          {saving ? 'Saving...' : `Record ${validCount} Items`}
+          {step === 'confirming'
+            ? 'Saving...'
+            : validCount === 0
+              ? currentPage.pageIndex < session.totalPages - 1
+                ? 'Skip & Next (All Duplicates)'
+                : 'Skip & Finish (All Duplicates)'
+              : currentPage.pageIndex < session.totalPages - 1
+                ? `Confirm & Next (${validCount} items)`
+                : `Confirm & Finish (${validCount} items)`}
         </button>
-      )}
 
-      <ConfirmDialog
-        isOpen={removingIndex !== null}
-        title="Remove Transaction"
-        message="Are you sure you want to remove this transaction from the scan results?"
-        confirmLabel="Remove"
-        onConfirm={handleRemoveConfirm}
-        onCancel={() => setRemovingIndex(null)}
-      />
-
-      {matchImageZoomed && matchImageUrl && (
-        <ImageLightbox
-          imageUrl={matchImageUrl}
-          alt="Matched transaction screenshot"
-          onClose={() => {
-            setMatchImageZoomed(false);
-            setMatchImageUrl(null);
-          }}
+        <ConfirmDialog
+          isOpen={removingIndex !== null}
+          title="Remove Transaction"
+          message="Are you sure you want to remove this transaction from the scan results?"
+          confirmLabel="Remove"
+          onConfirm={handleRemoveConfirm}
+          onCancel={() => setRemovingIndex(null)}
         />
-      )}
+
+        {matchImageZoomed && matchImageUrl && (
+          <ImageLightbox
+            imageUrl={matchImageUrl}
+            alt="Matched transaction screenshot"
+            onClose={() => {
+              setMatchImageZoomed(false);
+              setMatchImageUrl(null);
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
+  if (step === 'completed') {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <div className="text-6xl">✓</div>
+        <p className="text-slate-600 font-medium">All pages confirmed!</p>
+        <button
+          onClick={() => navigate({ to: '/ledger' })}
+          className="bg-slate-900 px-6 py-3 rounded-xl font-bold text-white"
+        >
+          View in Ledger
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+        <div>
+          <label className="block text-sm font-bold text-slate-600 mb-2">
+            Record as
+          </label>
+          <select
+            className="w-full bg-slate-50 text-base font-bold p-3 rounded-xl border-none outline-none min-h-[48px]"
+            style={{ fontSize: '16px' }}
+            value={defaultUser}
+            onChange={(e) => setDefaultUser(e.target.value)}
+          >
+            {config?.users.map((user) => (
+              <option key={user} value={user}>
+                {user}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <MultiFileUpload
+        loading={step === 'uploading'}
+        onFilesSelect={handleFilesSelect}
+      />
     </div>
   );
 }
