@@ -49,6 +49,20 @@ export class ScanRepository extends BaseRepository {
     return result;
   }
 
+  async findActiveSessionByUserForUpdate(userId: string): Promise<ScanSession | undefined> {
+    const [result] = await this.getDb()
+      .select()
+      .from(scanSessions)
+      .where(
+        and(
+          eq(scanSessions.userId, userId),
+          eq(scanSessions.status, SessionStatus.InProgress),
+        ),
+      )
+      .for('update');
+    return result;
+  }
+
   async updateSession(
     id: string,
     data: Partial<NewScanSession>,
@@ -75,6 +89,15 @@ export class ScanRepository extends BaseRepository {
       .from(scanSessionPages)
       .where(eq(scanSessionPages.sessionId, sessionId))
       .orderBy(scanSessionPages.pageIndex);
+  }
+
+  async findPagesBySessionIdForUpdate(sessionId: string): Promise<ScanSessionPage[]> {
+    return await this.getDb()
+      .select()
+      .from(scanSessionPages)
+      .where(eq(scanSessionPages.sessionId, sessionId))
+      .orderBy(scanSessionPages.pageIndex)
+      .for('update');
   }
 
   async findPageBySessionAndIndex(

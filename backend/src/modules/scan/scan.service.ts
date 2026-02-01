@@ -68,21 +68,25 @@ export class ScanService {
     files: Express.Multer.File[],
     appTypes?: PaymentApp[],
   ): Promise<ScanSessionStatusDto> {
-    const existingSession = await this.repository.findActiveSessionByUser(userId);
-    if (existingSession) {
-      throw new ConflictException(
-        'An active scan session already exists. Complete or cancel the existing session first.',
-      );
-    }
-
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + this.sessionExpiryHours);
 
-    const session = await this.repository.createSession({
-      userId,
-      status: SessionStatus.InProgress,
-      currentPageIndex: 0,
-      expiresAt,
+    const session = await this.db.transaction(async (tx) => {
+      const txRepo = this.repository.withTx(tx);
+
+      const existingSession = await txRepo.findActiveSessionByUserForUpdate(userId);
+      if (existingSession) {
+        throw new ConflictException(
+          'An active scan session already exists. Complete or cancel the existing session first.',
+        );
+      }
+
+      return await txRepo.createSession({
+        userId,
+        status: SessionStatus.InProgress,
+        currentPageIndex: 0,
+        expiresAt,
+      });
     });
 
     const uploadResults = await Promise.all(
@@ -187,7 +191,8 @@ export class ScanService {
     }
 
     if (new Date() > session.expiresAt) {
-      await this.cleanupSession(session.id);
+      const imageKeys = await this.cleanupSessionDb(session.id);
+      await this.cleanupStorageFiles(imageKeys);
       return null;
     }
 
@@ -412,49 +417,55 @@ export class ScanService {
   }
 
   async retryParse(sessionId: string): Promise<RetryParseResponseDto> {
-    const session = await this.repository.findSessionById(sessionId);
-    if (!session) {
-      throw new NotFoundException('Session not found');
-    }
-
-    const throttleResult = await this.repository.checkAndUpdateRetryThrottle(
-      sessionId,
-      this.retryThrottleMs,
-    );
-
-    if (!throttleResult.allowed) {
-      throw new BadRequestException(
-        `Please wait ${throttleResult.waitSeconds} seconds before retrying again.`,
-      );
-    }
-
     const staleThresholdMs = 60000;
-    const requeuedCount = await this.repository.requeueStuckPages(
-      sessionId,
-      staleThresholdMs,
-    );
-
     const staleDate = new Date(Date.now() - staleThresholdMs);
-    const pages = await this.repository.findPagesBySessionId(sessionId);
-    for (const page of pages) {
-      const isStaleProcessing =
-        page.parseStatus === ParseStatus.Processing &&
-        page.updatedAt &&
-        page.updatedAt < staleDate;
 
-      if (
-        page.parseStatus === ParseStatus.Pending ||
-        page.parseStatus === ParseStatus.Failed ||
-        isStaleProcessing
-      ) {
-        this.parseQueue.enqueue({
-          sessionId: session.id,
-          pageIndex: page.pageIndex,
-          pageId: page.id,
-          imageKey: page.imageKey,
-          appType: page.appType as PaymentApp | undefined,
-        });
+    const { requeuedCount, pagesToEnqueue } = await this.db.transaction(async (tx) => {
+      const txRepo = this.repository.withTx(tx);
+
+      const session = await txRepo.findSessionByIdForUpdate(sessionId);
+      if (!session) {
+        throw new NotFoundException('Session not found');
       }
+
+      const throttleResult = await txRepo.checkAndUpdateRetryThrottle(
+        sessionId,
+        this.retryThrottleMs,
+      );
+
+      if (!throttleResult.allowed) {
+        throw new BadRequestException(
+          `Please wait ${throttleResult.waitSeconds} seconds before retrying again.`,
+        );
+      }
+
+      const count = await txRepo.requeueStuckPages(sessionId, staleThresholdMs);
+
+      const pages = await txRepo.findPagesBySessionId(sessionId);
+      const toEnqueue = pages.filter((page) => {
+        const isStaleProcessing =
+          page.parseStatus === ParseStatus.Processing &&
+          page.updatedAt &&
+          page.updatedAt < staleDate;
+
+        return (
+          page.parseStatus === ParseStatus.Pending ||
+          page.parseStatus === ParseStatus.Failed ||
+          isStaleProcessing
+        );
+      }).map((page) => ({
+        sessionId: session.id,
+        pageIndex: page.pageIndex,
+        pageId: page.id,
+        imageKey: page.imageKey,
+        appType: page.appType as PaymentApp | undefined,
+      }));
+
+      return { requeuedCount: count, pagesToEnqueue: toEnqueue };
+    });
+
+    for (const item of pagesToEnqueue) {
+      this.parseQueue.enqueue(item);
     }
 
     return {
@@ -464,21 +475,40 @@ export class ScanService {
   }
 
   async cancelSession(sessionId: string): Promise<void> {
-    const session = await this.repository.findSessionById(sessionId);
-    if (!session) {
-      throw new NotFoundException('Session not found');
-    }
+    const imageKeys = await this.db.transaction(async (tx) => {
+      const txRepo = this.repository.withTx(tx);
 
-    await this.cleanupSession(sessionId);
+      const session = await txRepo.findSessionByIdForUpdate(sessionId);
+      if (!session) {
+        throw new NotFoundException('Session not found');
+      }
+
+      const pages = await txRepo.findPagesBySessionIdForUpdate(sessionId);
+      const keys = pages.map((page) => page.imageKey);
+
+      await txRepo.deleteSession(sessionId);
+
+      return keys;
+    });
+
+    await this.cleanupStorageFiles(imageKeys);
     this.logger.log(`Cancelled session ${sessionId}`);
   }
 
-  private async cleanupSession(sessionId: string): Promise<void> {
-    const pages = await this.repository.findPagesBySessionId(sessionId);
-    const imageKeys = pages.map((page) => page.imageKey);
+  private async cleanupSessionDb(sessionId: string): Promise<string[]> {
+    return await this.db.transaction(async (tx) => {
+      const txRepo = this.repository.withTx(tx);
 
-    await this.repository.deleteSession(sessionId);
+      const pages = await txRepo.findPagesBySessionIdForUpdate(sessionId);
+      const imageKeys = pages.map((page) => page.imageKey);
 
+      await txRepo.deleteSession(sessionId);
+
+      return imageKeys;
+    });
+  }
+
+  private async cleanupStorageFiles(imageKeys: string[]): Promise<void> {
     await Promise.all(
       imageKeys.map((imageKey) =>
         this.storageService.delete(imageKey).catch((err) => {
@@ -490,7 +520,8 @@ export class ScanService {
 
   private async checkAndCleanExpiredSession(session: { id: string; expiresAt: Date }): Promise<void> {
     if (new Date() > session.expiresAt) {
-      await this.cleanupSession(session.id);
+      const imageKeys = await this.cleanupSessionDb(session.id);
+      await this.cleanupStorageFiles(imageKeys);
       throw new NotFoundException('Session expired');
     }
   }

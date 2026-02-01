@@ -16,29 +16,11 @@ export class TransactionsRepository extends BaseRepository {
     super(db);
   }
 
-  async create(data: NewTransaction): Promise<Transaction> {
-    const [result] = await this.getDb().insert(transactions).values(data).returning();
-    return result;
-  }
-
-  async createMany(data: NewTransaction[]): Promise<Transaction[]> {
-    return await this.getDb().insert(transactions).values(data).returning();
-  }
-
   async findById(id: number): Promise<Transaction | undefined> {
     const [result] = await this.getDb()
       .select()
       .from(transactions)
       .where(eq(transactions.id, id));
-    return result;
-  }
-
-  async findByIdForUpdate(id: number): Promise<Transaction | undefined> {
-    const [result] = await this.getDb()
-      .select()
-      .from(transactions)
-      .where(eq(transactions.id, id))
-      .for('update');
     return result;
   }
 
