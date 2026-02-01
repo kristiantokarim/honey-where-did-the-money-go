@@ -93,3 +93,32 @@ npm run lint         # ESLint
 ### Commenting guide
 1. Avoid unnecessary comment, try to focus on commenting the intention (the why, NOT the what) behind code that are not straight-forward
 2. Do NOT use numbered comment
+
+## Robustness Guidelines
+
+When implementing features involving background processing, queues, or state machines:
+
+### Crash Recovery
+- Consider what happens if the server restarts mid-operation
+- Will state be stuck in an intermediate state? Is there self-healing? Cleanup?
+- Use stale thresholds for "processing" states to detect abandoned work
+- Prefer database state over in-memory state for durability
+
+### Concurrency & Race Conditions
+- Consider what happens if two requests attempt to modify the same row
+- Watch for TOCTOU (time-of-check to time-of-use) patterns: if code checks DB state then acts on it, ensure the row is locked (`SELECT ... FOR UPDATE`) or the operation is idempotent
+- Design retry mechanisms with appropriate backoff and throttling
+
+### Transaction Boundaries
+- Never call external services inside a database transaction
+- External calls can fail/timeout, leaving transactions hanging
+- Instead: commit DB state first, then call external service outside the transaction
+- Ensure eventual consistency: the external call must either succeed (via retries) or trigger cleanup/compensation if it ultimately fails (e.g., a sweeper job that cleans up orphaned records)
+
+## Code Simplification
+
+After implementing features, consider running the `code-simplifier` agent to:
+- Remove unnecessary complexity
+- Consolidate duplicate logic
+- Improve naming and readability
+- Clean up dead code paths
