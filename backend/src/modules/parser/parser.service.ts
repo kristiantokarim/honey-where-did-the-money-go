@@ -55,12 +55,22 @@ export class ParserService {
     const supportedApps = this.parserFactory.getSupportedApps();
     const appList = [...supportedApps, 'Unknown'].join(', ');
 
-    const response = await provider.analyzeImage(
-      `Analyze this screenshot. Reply with ONLY one word: ${appList}.`,
-      imageData,
-      mimeType,
-    );
+    const prompt = `Identify which payment/financial app this screenshot is from.
 
+Look for these visual markers:
+- Gojek: "GoPay Saldo" text, filter buttons (Date/Services/Methods), red fork icons
+- Grab: "Activity" title, bottom nav (Home/Discover/Payment/Activity/Messages), "Reorder" or "Rebook" links
+- Mandiri CC: "Transaksi" title, "e-Billing" link, date range tabs, merchant codes like "GRAB* A-xxx"
+- OVO: Purple theme, "OVO Cash" balance
+- BCA: "m-BCA" or blue BCA branding
+- Dana: "DANA" logo, blue theme
+- Jenius: "Jenius" branding, teal/turquoise theme
+- Jago: "Jago" branding
+- Danamon: "Danamon" branding
+
+Reply with ONLY one word from: ${appList}`;
+
+    const response = await provider.analyzeImage(prompt, imageData, mimeType);
     return (response.text || 'Unknown').trim();
   }
 
