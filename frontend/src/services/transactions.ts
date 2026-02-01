@@ -10,6 +10,7 @@ export const transactionService = {
     by?: string,
     sortBy?: SortBy,
     payment?: PaymentApp,
+    signal?: AbortSignal,
   ): Promise<Transaction[]> => {
     const params: Record<string, string> = { startDate, endDate };
     if (category) params.category = category;
@@ -18,7 +19,8 @@ export const transactionService = {
     if (payment) params.payment = payment;
 
     const response = await api.get<Transaction[]>('/transactions/history', {
-      params
+      params,
+      signal,
     });
     return response.data;
   },
@@ -28,6 +30,7 @@ export const transactionService = {
     endDate: string,
     by?: string,
     payment?: PaymentApp,
+    signal?: AbortSignal,
   ): Promise<DashboardItem[]> => {
     const params: Record<string, string> = { startDate, endDate };
     if (by) params.by = by;
@@ -35,6 +38,7 @@ export const transactionService = {
 
     const response = await api.get<DashboardItem[]>('/transactions/dashboard', {
       params,
+      signal,
     });
     return response.data;
   },

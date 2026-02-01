@@ -41,19 +41,22 @@ export class ScanCleanupService implements OnModuleInit {
   private async cleanupSession(sessionId: string): Promise<void> {
     try {
       const pages = await this.repository.findPagesBySessionId(sessionId);
+      const imageKeys = pages.map((page) => page.imageKey);
+
+      await this.repository.deleteSession(sessionId);
+      this.logger.log(`Deleted expired session ${sessionId} from database`);
 
       await Promise.all(
-        pages.map((page) =>
-          this.storageService.delete(page.imageKey).catch((err) => {
+        imageKeys.map((imageKey) =>
+          this.storageService.delete(imageKey).catch((err) => {
             this.logger.warn(
-              `Failed to delete image ${page.imageKey}: ${err.message}`,
+              `Failed to delete image ${imageKey}: ${err.message}`,
             );
           }),
         ),
       );
 
-      await this.repository.deleteSession(sessionId);
-      this.logger.log(`Cleaned up expired session ${sessionId}`);
+      this.logger.log(`Cleaned up storage for session ${sessionId}`);
     } catch (error) {
       this.logger.error(`Failed to cleanup session ${sessionId}:`, error);
     }

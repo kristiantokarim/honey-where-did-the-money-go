@@ -33,6 +33,24 @@ export class TransactionsRepository extends BaseRepository {
     return result;
   }
 
+  async findByIdForUpdate(id: number): Promise<Transaction | undefined> {
+    const [result] = await this.getDb()
+      .select()
+      .from(transactions)
+      .where(eq(transactions.id, id))
+      .for('update');
+    return result;
+  }
+
+  async findByIdsForUpdate(ids: number[]): Promise<Transaction[]> {
+    if (ids.length === 0) return [];
+    return await this.getDb()
+      .select()
+      .from(transactions)
+      .where(inArray(transactions.id, ids))
+      .for('update');
+  }
+
   async findByIds(ids: number[]): Promise<Transaction[]> {
     if (ids.length === 0) return [];
     return await this.getDb()
@@ -81,6 +99,14 @@ export class TransactionsRepository extends BaseRepository {
       .where(eq(transactions.id, id))
       .returning();
     return result;
+  }
+
+  async updateCategoryForIds(ids: number[], category: string): Promise<void> {
+    if (ids.length === 0) return;
+    await this.getDb()
+      .update(transactions)
+      .set({ category })
+      .where(inArray(transactions.id, ids));
   }
 
   async delete(id: number): Promise<void> {
@@ -417,6 +443,14 @@ export class TransactionsRepository extends BaseRepository {
       .select()
       .from(transactions)
       .where(inArray(transactions.forwardedTransactionId, ids));
+  }
+
+  async findTransactionsWithTransferLink(ids: number[]): Promise<Transaction[]> {
+    if (ids.length === 0) return [];
+    return await this.getDb()
+      .select()
+      .from(transactions)
+      .where(inArray(transactions.linkedTransferId, ids));
   }
 
   async findReverseForwardedMatchCandidates(

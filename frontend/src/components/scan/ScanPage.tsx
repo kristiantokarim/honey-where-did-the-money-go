@@ -137,15 +137,13 @@ export function ScanPage() {
           </p>
         </div>
 
-        {hasFailedPages && (
-          <button
-            onClick={retryParse}
-            className="w-full flex items-center justify-center gap-2 bg-amber-100 text-amber-800 py-3 rounded-xl font-medium"
-          >
-            <RefreshCw size={16} />
-            Retry Failed Pages
-          </button>
-        )}
+        <button
+          onClick={retryParse}
+          className="w-full flex items-center justify-center gap-2 bg-amber-100 text-amber-800 py-3 rounded-xl font-medium"
+        >
+          <RefreshCw size={16} />
+          {hasFailedPages ? 'Retry Failed Pages' : 'Retry Parsing'}
+        </button>
 
         <button
           onClick={cancelSession}

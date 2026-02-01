@@ -70,6 +70,7 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionRef = useRef<ScanSession | null>(null);
   const stepRef = useRef<SessionStep>('idle');
+  const confirmInProgressRef = useRef(false);
 
   const stopPolling = useCallback(() => {
     if (pollIntervalRef.current) {
@@ -285,6 +286,13 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
   const confirmCurrentPage = useCallback(async () => {
     if (!session || !currentPage) return;
 
+    if (confirmInProgressRef.current) {
+      return;
+    }
+    confirmInProgressRef.current = true;
+
+    stopPolling();
+
     const itemsToSave = transactions.filter(isSaveable).map((item) => ({
       ...item,
       reverseCcMatchId:
@@ -325,6 +333,7 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
         setSession(updatedSession);
         sessionRef.current = updatedSession;
         await loadPageForReview(result.nextPageIndex);
+        startPolling();
       }
     } catch (err) {
       console.error('Confirm page failed:', err);
@@ -332,8 +341,11 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
       setStep('error');
       stepRef.current = 'error';
       showToast('Failed to save transactions', 'error');
+      startPolling();
+    } finally {
+      confirmInProgressRef.current = false;
     }
-  }, [session, currentPage, transactions, showToast, loadPageForReview]);
+  }, [session, currentPage, transactions, showToast, loadPageForReview, stopPolling, startPolling]);
 
   const retryParse = useCallback(async () => {
     if (!session) return;

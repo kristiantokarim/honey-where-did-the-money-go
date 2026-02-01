@@ -1,8 +1,10 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { TransactionsRepository } from './transactions.repository';
 import { UpdateTransactionDto, DateRangeQueryDto, LedgerTotalQueryDto } from '../../common/dtos/transaction.dto';
 import { Transaction, NewTransaction } from '../../database/schema';
 import { Category, PaymentApp, TransactionType } from '../../common/enums';
+import { DATABASE_TOKEN } from '../../database/database.provider';
+import { Database } from '../../database/base.repository';
 
 @Injectable()
 export class TransactionsService {
@@ -18,6 +20,8 @@ export class TransactionsService {
 
   constructor(
     private readonly repository: TransactionsRepository,
+    @Inject(DATABASE_TOKEN)
+    private readonly db: Database,
   ) {}
 
   async getHistory(
@@ -111,21 +115,26 @@ export class TransactionsService {
   }
 
   private async syncForwardedCategory(transactionId: number, category: Category): Promise<void> {
-    const transaction = await this.repository.findById(transactionId);
-    if (!transaction) return;
+    await this.db.transaction(async (dbTx) => {
+      const txRepo = this.repository.withTx(dbTx);
 
-    // If this is a CC transaction linked to an app transaction, update the app transaction
-    if (transaction.forwardedTransactionId) {
-      await this.repository.update(transaction.forwardedTransactionId, { category });
-      this.logger.log(`Synced category to app transaction ${transaction.forwardedTransactionId}`);
-    }
+      const transaction = await txRepo.findById(transactionId);
+      if (!transaction) return;
 
-    // If this is an app transaction with linked CC transactions, update them all
-    const linkedCcTransactions = await this.repository.findTransactionsWithForwardedLink([transactionId]);
-    for (const ccTx of linkedCcTransactions) {
-      await this.repository.update(ccTx.id, { category });
-      this.logger.log(`Synced category to CC transaction ${ccTx.id}`);
-    }
+      const idsToUpdate: number[] = [];
+
+      if (transaction.forwardedTransactionId) {
+        idsToUpdate.push(transaction.forwardedTransactionId);
+      }
+
+      const linkedCcTransactions = await txRepo.findTransactionsWithForwardedLink([transactionId]);
+      idsToUpdate.push(...linkedCcTransactions.map((t) => t.id));
+
+      if (idsToUpdate.length > 0) {
+        await txRepo.updateCategoryForIds(idsToUpdate, category);
+        this.logger.log(`Synced category to ${idsToUpdate.length} linked transaction(s)`);
+      }
+    });
   }
 
   async delete(id: number): Promise<void> {
@@ -143,10 +152,20 @@ export class TransactionsService {
       );
     }
 
-    const ccChildren = await this.repository.findTransactionsWithForwardedLink([id]);
+    const [ccChildren, transferLinks] = await Promise.all([
+      this.repository.findTransactionsWithForwardedLink([id]),
+      this.repository.findTransactionsWithTransferLink([id]),
+    ]);
+
     if (ccChildren.length > 0) {
       throw new BadRequestException(
         'Cannot delete transaction with linked CC payments. Unlink them first.'
+      );
+    }
+
+    if (transferLinks.length > 0) {
+      throw new BadRequestException(
+        'Cannot delete transaction that is linked as a transfer target. Unlink the transfer first.'
       );
     }
 
@@ -248,17 +267,32 @@ export class TransactionsService {
   }
 
   async linkTransfer(id: number, matchedId: number): Promise<void> {
-    const tx = await this.findByIdOrThrow(id);
-    const matchedTx = await this.findByIdOrThrow(matchedId);
+    await this.db.transaction(async (dbTx) => {
+      const txRepo = this.repository.withTx(dbTx);
 
-    if (tx.linkedTransferId) {
-      throw new BadRequestException('Transaction is already linked');
-    }
-    if (matchedTx.linkedTransferId) {
-      throw new BadRequestException('Matched transaction is already linked');
-    }
+      const sortedIds = [id, matchedId].sort((a, b) => a - b);
+      const locked = await txRepo.findByIdsForUpdate(sortedIds);
 
-    await this.repository.linkTransfers(id, matchedId);
+      const tx = locked.find((t) => t.id === id);
+      const matchedTx = locked.find((t) => t.id === matchedId);
+
+      if (!tx) {
+        throw new NotFoundException(`Transaction with id ${id} not found`);
+      }
+      if (!matchedTx) {
+        throw new NotFoundException(`Transaction with id ${matchedId} not found`);
+      }
+
+      if (tx.linkedTransferId) {
+        throw new BadRequestException('Transaction is already linked');
+      }
+      if (matchedTx.linkedTransferId) {
+        throw new BadRequestException('Matched transaction is already linked');
+      }
+
+      await txRepo.linkTransfers(id, matchedId);
+    });
+
     this.logger.log(`Linked transactions ${id} and ${matchedId}`);
   }
 }

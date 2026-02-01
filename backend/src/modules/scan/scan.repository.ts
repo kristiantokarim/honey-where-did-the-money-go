@@ -93,6 +93,32 @@ export class ScanRepository extends BaseRepository {
     return result;
   }
 
+  async findPageBySessionAndIndexForUpdate(
+    sessionId: string,
+    pageIndex: number,
+  ): Promise<ScanSessionPage | undefined> {
+    const [result] = await this.getDb()
+      .select()
+      .from(scanSessionPages)
+      .where(
+        and(
+          eq(scanSessionPages.sessionId, sessionId),
+          eq(scanSessionPages.pageIndex, pageIndex),
+        ),
+      )
+      .for('update');
+    return result;
+  }
+
+  async findSessionByIdForUpdate(id: string): Promise<ScanSession | undefined> {
+    const [result] = await this.getDb()
+      .select()
+      .from(scanSessions)
+      .where(eq(scanSessions.id, id))
+      .for('update');
+    return result;
+  }
+
   async updatePage(
     id: number,
     data: Partial<ScanSessionPage>,
@@ -230,7 +256,12 @@ export class ScanRepository extends BaseRepository {
     return Number(unconfirmed[0]?.count ?? 0) === 0;
   }
 
-  async requeueFailedPages(sessionId: string): Promise<number> {
+  async requeueStuckPages(
+    sessionId: string,
+    staleThresholdMs: number = 60000,
+  ): Promise<number> {
+    const staleDate = new Date(Date.now() - staleThresholdMs);
+
     const result = await this.getDb()
       .update(scanSessionPages)
       .set({
@@ -244,10 +275,49 @@ export class ScanRepository extends BaseRepository {
           or(
             eq(scanSessionPages.parseStatus, ParseStatus.Pending),
             eq(scanSessionPages.parseStatus, ParseStatus.Failed),
+            and(
+              eq(scanSessionPages.parseStatus, ParseStatus.Processing),
+              lt(scanSessionPages.updatedAt, staleDate),
+            ),
           ),
         ),
       )
       .returning();
     return result.length;
+  }
+
+  async checkAndUpdateRetryThrottle(
+    sessionId: string,
+    throttleMs: number,
+  ): Promise<{ allowed: boolean; waitSeconds?: number }> {
+    const now = new Date();
+    const throttleDate = new Date(now.getTime() - throttleMs);
+
+    const result = await this.getDb()
+      .update(scanSessions)
+      .set({ lastRetryAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(scanSessions.id, sessionId),
+          or(
+            sql`${scanSessions.lastRetryAt} IS NULL`,
+            lt(scanSessions.lastRetryAt, throttleDate),
+          ),
+        ),
+      )
+      .returning();
+
+    if (result.length > 0) {
+      return { allowed: true };
+    }
+
+    const session = await this.findSessionById(sessionId);
+    if (!session?.lastRetryAt) {
+      return { allowed: true };
+    }
+
+    const timeSinceLastRetry = now.getTime() - session.lastRetryAt.getTime();
+    const waitSeconds = Math.ceil((throttleMs - timeSinceLastRetry) / 1000);
+    return { allowed: false, waitSeconds };
   }
 }

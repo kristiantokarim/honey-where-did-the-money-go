@@ -1,0 +1,1 @@
+ALTER TABLE "scan_sessions" ADD COLUMN "last_retry_at" timestamp;

@@ -10,6 +10,7 @@ export const scanSessions = pgTable(
     createdAt: timestamp('created_at').defaultNow(),
     expiresAt: timestamp('expires_at').notNull(),
     updatedAt: timestamp('updated_at').defaultNow(),
+    lastRetryAt: timestamp('last_retry_at'),
   },
   (table) => [
     index('idx_scan_sessions_user_id').on(table.userId),

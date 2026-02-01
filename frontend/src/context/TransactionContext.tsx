@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from 'react';
 import { transactionService } from '../services/transactions';
 import { useToast } from './ToastContext';
 import { getMonthRange } from '../utils/format';
@@ -61,10 +61,12 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
   // History state
   const [historyData, setHistoryData] = useState<Transaction[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const historyAbortRef = useRef<AbortController | null>(null);
 
   // Dashboard state
   const [dashData, setDashData] = useState<DashboardItem[]>([]);
   const [dashLoading, setDashLoading] = useState(false);
+  const dashboardAbortRef = useRef<AbortController | null>(null);
 
   // Date filter
   const [dateFilter, setDateFilter] = useState<DateFilter>(getMonthRange());
@@ -83,6 +85,10 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
   });
 
   const refreshHistory = useCallback(async () => {
+    historyAbortRef.current?.abort();
+    const controller = new AbortController();
+    historyAbortRef.current = controller;
+
     setHistoryLoading(true);
     try {
       const data = await transactionService.getHistory(
@@ -92,9 +98,13 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
         ledgerFilters.by || undefined,
         undefined,
         ledgerFilters.payment || undefined,
+        controller.signal,
       );
       setHistoryData(data);
     } catch (error) {
+      if (error instanceof Error && error.name === 'CanceledError') {
+        return;
+      }
       console.error('Failed to fetch history:', error);
       showToast('Failed to load transactions', 'error');
     } finally {
@@ -103,6 +113,10 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
   }, [dateFilter.start, dateFilter.end, ledgerFilters.category, ledgerFilters.by, ledgerFilters.payment, showToast]);
 
   const refreshDashboard = useCallback(async () => {
+    dashboardAbortRef.current?.abort();
+    const controller = new AbortController();
+    dashboardAbortRef.current = controller;
+
     setDashLoading(true);
     try {
       const data = await transactionService.getDashboard(
@@ -110,9 +124,13 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
         dateFilter.end,
         dashboardFilters.by || undefined,
         dashboardFilters.payment || undefined,
+        controller.signal,
       );
       setDashData(data);
     } catch (error) {
+      if (error instanceof Error && error.name === 'CanceledError') {
+        return;
+      }
       console.error('Failed to fetch dashboard:', error);
       showToast('Failed to load dashboard', 'error');
     } finally {

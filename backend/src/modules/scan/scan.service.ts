@@ -53,7 +53,6 @@ export class ScanService {
   private readonly logger = new Logger(ScanService.name);
   private readonly sessionExpiryHours = 48;
   private readonly retryThrottleMs = 30000;
-  private readonly lastRetryAttempt = new Map<string, number>();
 
   constructor(
     private readonly repository: ScanRepository,
@@ -323,55 +322,59 @@ export class ScanService {
     pageIndex: number,
     transactions: ConfirmTransactionItemDto[],
   ): Promise<ConfirmPageResponseDto> {
-    const session = await this.repository.findSessionById(sessionId);
-    if (!session) {
-      throw new NotFoundException('Session not found');
-    }
-
-    await this.checkAndCleanExpiredSession(session);
-
-    if (pageIndex !== session.currentPageIndex) {
-      throw new BadRequestException(
-        `Cannot confirm page ${pageIndex}. Current page is ${session.currentPageIndex}.`,
-      );
-    }
-
-    const page = await this.repository.findPageBySessionAndIndex(
-      sessionId,
-      pageIndex,
-    );
-    if (!page) {
-      throw new NotFoundException('Page not found');
-    }
-
-    if (page.reviewStatus === ReviewStatus.Confirmed) {
-      throw new BadRequestException('Page is already confirmed');
-    }
-
-    const imageUrl = await this.storageService.getUrl(page.imageKey);
-
-    const transactionsToInsert: NewTransaction[] = transactions.map((item) => {
-      const { matchedTransactionId, forwardedTransactionId, reverseCcMatchId, ...rest } = item;
-      return {
-        ...rest,
-        price: item.total,
-        quantity: item.quantity || 1,
-        imageUrl,
-        forwardedTransactionId: forwardedTransactionId,
-      };
-    });
-
-    const links = transactions.map((item, index) => ({
-      index,
-      matchedTransactionId: item.matchedTransactionId,
-      reverseCcMatchId: item.reverseCcMatchId,
-    }));
-
-    const totalPages = await this.repository.countTotalPages(sessionId);
-    const nextPageIndex = pageIndex + 1;
-    const sessionCompleted = nextPageIndex >= totalPages;
-
     const result = await this.db.transaction(async (tx) => {
+      const txRepo = this.repository.withTx(tx);
+
+      const session = await txRepo.findSessionByIdForUpdate(sessionId);
+      if (!session) {
+        throw new NotFoundException('Session not found');
+      }
+
+      if (new Date() > session.expiresAt) {
+        throw new BadRequestException('Session expired');
+      }
+
+      if (pageIndex !== session.currentPageIndex) {
+        throw new BadRequestException(
+          `Cannot confirm page ${pageIndex}. Current page is ${session.currentPageIndex}.`,
+        );
+      }
+
+      const page = await txRepo.findPageBySessionAndIndexForUpdate(
+        sessionId,
+        pageIndex,
+      );
+      if (!page) {
+        throw new NotFoundException('Page not found');
+      }
+
+      if (page.reviewStatus === ReviewStatus.Confirmed) {
+        throw new BadRequestException('Page is already confirmed');
+      }
+
+      const imageUrl = await this.storageService.getUrl(page.imageKey);
+
+      const transactionsToInsert: NewTransaction[] = transactions.map((item) => {
+        const { matchedTransactionId, forwardedTransactionId, reverseCcMatchId, ...rest } = item;
+        return {
+          ...rest,
+          price: item.total,
+          quantity: item.quantity || 1,
+          imageUrl,
+          forwardedTransactionId: forwardedTransactionId,
+        };
+      });
+
+      const links = transactions.map((item, index) => ({
+        index,
+        matchedTransactionId: item.matchedTransactionId,
+        reverseCcMatchId: item.reverseCcMatchId,
+      }));
+
+      const totalPages = await txRepo.countTotalPages(sessionId);
+      const nextPageIndex = pageIndex + 1;
+      const sessionCompleted = nextPageIndex >= totalPages;
+
       let created: { id: number }[] = [];
       if (transactionsToInsert.length > 0) {
         const insertResult = await this.transactionsRepository
@@ -380,20 +383,20 @@ export class ScanService {
         created = insertResult.created;
       }
 
-      await this.repository.withTx(tx).markPageConfirmed(page.id);
+      await txRepo.markPageConfirmed(page.id);
 
       if (sessionCompleted) {
-        await this.repository.withTx(tx).updateSession(sessionId, {
+        await txRepo.updateSession(sessionId, {
           status: SessionStatus.Completed,
           currentPageIndex: pageIndex,
         });
       } else {
-        await this.repository.withTx(tx).updateSession(sessionId, {
+        await txRepo.updateSession(sessionId, {
           currentPageIndex: nextPageIndex,
         });
       }
 
-      return { created };
+      return { created, sessionCompleted, nextPageIndex };
     });
 
     this.logger.log(
@@ -403,8 +406,8 @@ export class ScanService {
     return {
       success: true,
       createdCount: result.created.length,
-      nextPageIndex: sessionCompleted ? null : nextPageIndex,
-      sessionCompleted,
+      nextPageIndex: result.sessionCompleted ? null : result.nextPageIndex,
+      sessionCompleted: result.sessionCompleted,
     };
   }
 
@@ -414,26 +417,35 @@ export class ScanService {
       throw new NotFoundException('Session not found');
     }
 
-    const lastAttempt = this.lastRetryAttempt.get(sessionId);
-    const now = Date.now();
-    if (lastAttempt && now - lastAttempt < this.retryThrottleMs) {
-      const waitSeconds = Math.ceil(
-        (this.retryThrottleMs - (now - lastAttempt)) / 1000,
-      );
+    const throttleResult = await this.repository.checkAndUpdateRetryThrottle(
+      sessionId,
+      this.retryThrottleMs,
+    );
+
+    if (!throttleResult.allowed) {
       throw new BadRequestException(
-        `Please wait ${waitSeconds} seconds before retrying again.`,
+        `Please wait ${throttleResult.waitSeconds} seconds before retrying again.`,
       );
     }
 
-    this.lastRetryAttempt.set(sessionId, now);
+    const staleThresholdMs = 60000;
+    const requeuedCount = await this.repository.requeueStuckPages(
+      sessionId,
+      staleThresholdMs,
+    );
 
-    const requeuedCount = await this.repository.requeueFailedPages(sessionId);
-
+    const staleDate = new Date(Date.now() - staleThresholdMs);
     const pages = await this.repository.findPagesBySessionId(sessionId);
     for (const page of pages) {
+      const isStaleProcessing =
+        page.parseStatus === ParseStatus.Processing &&
+        page.updatedAt &&
+        page.updatedAt < staleDate;
+
       if (
         page.parseStatus === ParseStatus.Pending ||
-        page.parseStatus === ParseStatus.Failed
+        page.parseStatus === ParseStatus.Failed ||
+        isStaleProcessing
       ) {
         this.parseQueue.enqueue({
           sessionId: session.id,
@@ -463,17 +475,17 @@ export class ScanService {
 
   private async cleanupSession(sessionId: string): Promise<void> {
     const pages = await this.repository.findPagesBySessionId(sessionId);
+    const imageKeys = pages.map((page) => page.imageKey);
+
+    await this.repository.deleteSession(sessionId);
 
     await Promise.all(
-      pages.map((page) =>
-        this.storageService.delete(page.imageKey).catch((err) => {
-          this.logger.warn(`Failed to delete image ${page.imageKey}: ${err.message}`);
+      imageKeys.map((imageKey) =>
+        this.storageService.delete(imageKey).catch((err) => {
+          this.logger.warn(`Failed to delete image ${imageKey}: ${err.message}`);
         }),
       ),
     );
-
-    await this.repository.deleteSession(sessionId);
-    this.lastRetryAttempt.delete(sessionId);
   }
 
   private async checkAndCleanExpiredSession(session: { id: string; expiresAt: Date }): Promise<void> {
