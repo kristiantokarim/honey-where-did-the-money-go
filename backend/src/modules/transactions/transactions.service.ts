@@ -1,27 +1,8 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { TransactionsRepository } from './transactions.repository';
-import { ParserService } from '../parser/parser.service';
-import { StorageService } from '../storage/storage.service';
-import { CreateTransactionDto, UpdateTransactionDto, DateRangeQueryDto, LedgerTotalQueryDto } from '../../common/dtos/transaction.dto';
-import { ParsedTransaction } from '../../common/dtos/parse-result.dto';
+import { UpdateTransactionDto, DateRangeQueryDto, LedgerTotalQueryDto } from '../../common/dtos/transaction.dto';
 import { Transaction, NewTransaction } from '../../database/schema';
 import { Category, PaymentApp, TransactionType } from '../../common/enums';
-
-interface RawParsedTransaction {
-  date: string;
-  category: Category;
-  expense: string;
-  price: number;
-  quantity: number;
-  total: number;
-  payment: PaymentApp;
-  to: string;
-  remarks?: string;
-  status: string;
-  isValid: boolean;
-  transactionType: TransactionType;
-  forwardedFromApp?: PaymentApp;
-}
 
 @Injectable()
 export class TransactionsService {
@@ -37,142 +18,7 @@ export class TransactionsService {
 
   constructor(
     private readonly repository: TransactionsRepository,
-    private readonly parserService: ParserService,
-    private readonly storageService: StorageService,
   ) {}
-
-  async parseReceipt(
-    file: Buffer,
-    mimeType: string,
-    originalFilename: string,
-    appType?: PaymentApp,
-  ): Promise<{
-    appType: PaymentApp;
-    transactions: ParsedTransaction[];
-    imageUrl: string;
-  }> {
-    // Upload image to MinIO
-    const imageFilename = await this.storageService.upload(file, originalFilename, mimeType);
-    const imageUrl = await this.storageService.getUrl(imageFilename);
-
-    // Parse the image (pass appType to skip AI detection if provided)
-    const result = await this.parserService.parseImage(file, mimeType, appType);
-
-    // Enrich transactions with match info
-    const enriched = await this.enrichTransactions(result.transactions, result.appType);
-
-    return {
-      appType: result.appType,
-      transactions: enriched,
-      imageUrl,
-    };
-  }
-
-  private async enrichTransactions(
-    rawTransactions: RawParsedTransaction[],
-    appType: PaymentApp,
-  ): Promise<ParsedTransaction[]> {
-    // Prepare data for parallel checks
-    const duplicateCheckItems = rawTransactions.map(t => ({
-      date: t.date,
-      total: t.total,
-      to: t.to,
-      expense: t.expense,
-      payment: t.payment,
-    }));
-
-    const transferCheckItems = rawTransactions.map(t => ({
-      transactionType: t.transactionType,
-      total: t.total,
-      date: t.date,
-      payment: t.payment,
-    }));
-
-    // Items that have forwardedFromApp (CC transactions looking for app transactions)
-    const forwardedItems = rawTransactions
-      .map((t, idx) => ({ ...t, originalIndex: idx }))
-      .filter(t => t.forwardedFromApp);
-
-    const forwardedCheckItems = forwardedItems.map(t => ({
-      forwardedFromApp: t.forwardedFromApp!,
-      total: t.total,
-      date: t.date,
-    }));
-
-    // Check if this is a source app (Grab/Gojek) that needs reverse CC matching
-    const isSourceApp = appType === PaymentApp.Grab || appType === PaymentApp.Gojek;
-    const reverseCcCheckItems = isSourceApp
-      ? rawTransactions.map(t => ({
-          payment: t.payment,
-          total: t.total,
-          date: t.date,
-        }))
-      : [];
-
-    // Run all checks in parallel
-    const [duplicates, transferMatches, forwardedMatches, reverseCcMatches] = await Promise.all([
-      this.repository.checkDuplicates(duplicateCheckItems),
-      this.repository.findPotentialTransferMatches(transferCheckItems),
-      forwardedCheckItems.length > 0
-        ? this.repository.findForwardedMatchCandidates(forwardedCheckItems)
-        : [],
-      reverseCcCheckItems.length > 0
-        ? this.repository.findReverseForwardedMatchCandidates(reverseCcCheckItems)
-        : [],
-    ]);
-
-    // Build a map from forwardedItems index to candidates
-    const forwardedMatchMap = new Map<number, Transaction[]>();
-    for (const match of forwardedMatches) {
-      const originalIndex = forwardedItems[match.index]?.originalIndex;
-      if (originalIndex !== undefined) {
-        forwardedMatchMap.set(originalIndex, match.candidates);
-      }
-    }
-
-    return rawTransactions.map((t, idx): ParsedTransaction => ({
-      ...t,
-      isDuplicate: duplicates[idx].exists,
-      duplicateMatchedId: duplicates[idx].matchedId,
-      transferMatch: transferMatches.find(m => m.index === idx)?.match ?? null,
-      forwardedMatchCandidates: forwardedMatchMap.get(idx) ?? [],
-      reverseCcMatchCandidates: isSourceApp
-        ? (reverseCcMatches.find(m => m.index === idx)?.candidates ?? [])
-        : [],
-    }));
-  }
-
-  async confirmTransactions(
-    items: CreateTransactionDto[],
-  ): Promise<{ success: boolean; count: number; createdIds: number[] }> {
-    // Prepare transactions for insert
-    const transactionsToInsert: NewTransaction[] = items.map((item) => {
-      const { matchedTransactionId, forwardedTransactionId, reverseCcMatchId, ...rest } = item;
-      return {
-        ...rest,
-        price: item.total, // Sync price with total
-        quantity: item.quantity || 1,
-        // Include forwardedTransactionId directly when saving (for CC→App linking set at scan time)
-        forwardedTransactionId: forwardedTransactionId,
-      };
-    });
-
-    // Prepare link instructions
-    const links = items.map((item, index) => ({
-      index,
-      matchedTransactionId: item.matchedTransactionId,
-      reverseCcMatchId: item.reverseCcMatchId,
-    }));
-
-    // Execute transactionally in repository
-    const { created, createdIds } = await this.repository.createManyWithLinks(
-      transactionsToInsert,
-      links,
-    );
-
-    this.logger.log(`Confirmed ${created.length} transactions with links`);
-    return { success: true, count: created.length, createdIds };
-  }
 
   async getHistory(
     query: DateRangeQueryDto,
@@ -243,7 +89,7 @@ export class TransactionsService {
   }
 
   async update(id: number, data: UpdateTransactionDto): Promise<Transaction> {
-    const existing = await this.findByIdOrThrow(id);
+    await this.findByIdOrThrow(id);
 
     // Sync total to price for consistency
     const updateData: Partial<NewTransaction> = { ...data };

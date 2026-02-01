@@ -4,7 +4,7 @@ import { RouterProvider, createRouter } from '@tanstack/react-router';
 import { AppProvider } from './context/AppContext';
 import { TransactionProvider } from './context/TransactionContext';
 import { ToastProvider } from './context/ToastContext';
-import { UploadProvider } from './context/UploadContext';
+import { ScanSessionProvider } from './context/ScanSessionContext';
 import { ToastContainer } from './components/ui/Toast';
 import { routeTree } from './routeTree.gen';
 import './index.css';
@@ -22,9 +22,9 @@ createRoot(document.getElementById('root')!).render(
     <ToastProvider>
       <AppProvider>
         <TransactionProvider>
-          <UploadProvider>
+          <ScanSessionProvider>
             <RouterProvider router={router} />
-          </UploadProvider>
+          </ScanSessionProvider>
         </TransactionProvider>
       </AppProvider>
       <ToastContainer />

@@ -7,48 +7,19 @@ import {
   Body,
   Param,
   Query,
-  UploadedFile,
-  UseInterceptors,
-  BadRequestException,
   ParseIntPipe,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { TransactionsService } from './transactions.service';
 import {
-  CreateTransactionDto,
   UpdateTransactionDto,
   DateRangeQueryDto,
   LedgerTotalQueryDto,
   LinkForwardedDto,
 } from '../../common/dtos/transaction.dto';
-import { PaymentApp } from '../../common/enums';
 
 @Controller('transactions')
 export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
-
-  @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
-  async upload(
-    @UploadedFile() file: Express.Multer.File,
-    @Body('appType') appType?: PaymentApp,
-  ) {
-    if (!file) {
-      throw new BadRequestException('File is required');
-    }
-
-    return this.transactionsService.parseReceipt(
-      file.buffer,
-      file.mimetype,
-      file.originalname,
-      appType,
-    );
-  }
-
-  @Post('confirm')
-  async confirm(@Body() payload: CreateTransactionDto[]) {
-    return this.transactionsService.confirmTransactions(payload);
-  }
 
   @Get('history')
   async getHistory(@Query() query: DateRangeQueryDto) {

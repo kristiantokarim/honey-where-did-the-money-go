@@ -1,28 +1,8 @@
 import { api } from './api';
-import type { Transaction, ParsedTransaction, DashboardItem, ParseResult } from '../types';
+import type { Transaction, DashboardItem } from '../types';
 import { Category, PaymentApp, LedgerMode, SortBy } from '../types/enums';
 
 export const transactionService = {
-  upload: async (file: File, appType?: PaymentApp): Promise<ParseResult> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (appType) {
-      formData.append('appType', appType);
-    }
-    const response = await api.post<ParseResult>('/transactions/upload', formData);
-    return response.data;
-  },
-
-  confirm: async (
-    items: ParsedTransaction[]
-  ): Promise<{ success: boolean; count: number; createdIds: number[] }> => {
-    const response = await api.post<{ success: boolean; count: number; createdIds: number[] }>(
-      '/transactions/confirm',
-      items
-    );
-    return response.data;
-  },
-
   getHistory: async (
     startDate: string,
     endDate: string,

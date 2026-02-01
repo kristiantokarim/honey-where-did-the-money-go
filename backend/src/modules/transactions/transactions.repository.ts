@@ -1,31 +1,32 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { and, eq, gte, lte, desc, sql, inArray } from 'drizzle-orm';
 import { DATABASE_TOKEN } from '../../database/database.provider';
-import * as schema from '../../database/schema';
+import { BaseRepository, Database } from '../../database/base.repository';
 import { transactions, Transaction, NewTransaction } from '../../database/schema';
 import { EXPENSE_TYPES, INCOME_TYPES, TransactionType, LedgerMode, SortBy, PaymentApp } from '../../common/enums';
 
 @Injectable()
-export class TransactionsRepository {
+export class TransactionsRepository extends BaseRepository {
   private readonly logger = new Logger(TransactionsRepository.name);
 
   constructor(
     @Inject(DATABASE_TOKEN)
-    private readonly db: NodePgDatabase<typeof schema>,
-  ) {}
+    db: Database,
+  ) {
+    super(db);
+  }
 
   async create(data: NewTransaction): Promise<Transaction> {
-    const [result] = await this.db.insert(transactions).values(data).returning();
+    const [result] = await this.getDb().insert(transactions).values(data).returning();
     return result;
   }
 
   async createMany(data: NewTransaction[]): Promise<Transaction[]> {
-    return await this.db.insert(transactions).values(data).returning();
+    return await this.getDb().insert(transactions).values(data).returning();
   }
 
   async findById(id: number): Promise<Transaction | undefined> {
-    const [result] = await this.db
+    const [result] = await this.getDb()
       .select()
       .from(transactions)
       .where(eq(transactions.id, id));
@@ -34,7 +35,7 @@ export class TransactionsRepository {
 
   async findByIds(ids: number[]): Promise<Transaction[]> {
     if (ids.length === 0) return [];
-    return await this.db
+    return await this.getDb()
       .select()
       .from(transactions)
       .where(inArray(transactions.id, ids));
@@ -66,7 +67,7 @@ export class TransactionsRepository {
     const orderByColumn =
       sortBy === SortBy.Total ? desc(transactions.total) : desc(transactions.date);
 
-    return await this.db
+    return await this.getDb()
       .select()
       .from(transactions)
       .where(and(...conditions))
@@ -74,7 +75,7 @@ export class TransactionsRepository {
   }
 
   async update(id: number, data: Partial<NewTransaction>): Promise<Transaction | undefined> {
-    const [result] = await this.db
+    const [result] = await this.getDb()
       .update(transactions)
       .set(data)
       .where(eq(transactions.id, id))
@@ -83,7 +84,7 @@ export class TransactionsRepository {
   }
 
   async delete(id: number): Promise<void> {
-    await this.db.delete(transactions).where(eq(transactions.id, id));
+    await this.getDb().delete(transactions).where(eq(transactions.id, id));
   }
 
   async checkDuplicates(
@@ -98,7 +99,7 @@ export class TransactionsRepository {
         );
 
         // Find candidates with same date, total, and payment app (duplicates only happen within same app)
-        const candidates = await this.db
+        const candidates = await this.getDb()
           .select()
           .from(transactions)
           .where(
@@ -194,7 +195,7 @@ export class TransactionsRepository {
       conditions.push(eq(transactions.payment, payment));
     }
 
-    const data = await this.db
+    const data = await this.getDb()
       .select()
       .from(transactions)
       .where(and(...conditions));
@@ -247,7 +248,7 @@ export class TransactionsRepository {
     if (mode === LedgerMode.ExpensesOnly) {
       conditions.push(inArray(transactions.transactionType, [...EXPENSE_TYPES]));
 
-      const result = await this.db
+      const result = await this.getDb()
         .select({ total: sql<number>`COALESCE(SUM(${transactions.total}), 0)` })
         .from(transactions)
         .where(and(...conditions));
@@ -261,11 +262,11 @@ export class TransactionsRepository {
     const incomeConditions = [...conditions, inArray(transactions.transactionType, [...INCOME_TYPES])];
 
     const [expenseResult, incomeResult] = await Promise.all([
-      this.db
+      this.getDb()
         .select({ total: sql<number>`COALESCE(SUM(${transactions.total}), 0)` })
         .from(transactions)
         .where(and(...expenseConditions)),
-      this.db
+      this.getDb()
         .select({ total: sql<number>`COALESCE(SUM(${transactions.total}), 0)` })
         .from(transactions)
         .where(and(...incomeConditions)),
@@ -299,7 +300,7 @@ export class TransactionsRepository {
         const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
         // Find candidates: opposite type, same amount, within ±1 day, different app, not already linked
-        const candidates = await this.db
+        const candidates = await this.getDb()
           .select()
           .from(transactions)
           .where(
@@ -325,7 +326,7 @@ export class TransactionsRepository {
   }
 
     async linkTransfers(id1: number, id2: number): Promise<void> {
-        await this.db
+        await this.getDb()
             .update(transactions)
             .set({
                 linkedTransferId: sql`CASE
@@ -340,7 +341,7 @@ export class TransactionsRepository {
     const transaction = await this.findById(id);
     if (!transaction?.linkedTransferId) return;
 
-    await this.db
+    await this.getDb()
       .update(transactions)
       .set({ linkedTransferId: null })
       .where(inArray(transactions.id, [id, transaction.linkedTransferId]));
@@ -361,7 +362,7 @@ export class TransactionsRepository {
         const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
         // Find candidates: same app, same amount, within ±2 days, not already linked as forwarded
-        const candidates = await this.db
+        const candidates = await this.getDb()
           .select()
           .from(transactions)
           .where(
@@ -374,7 +375,7 @@ export class TransactionsRepository {
           );
 
         // Filter out transactions that are already linked as the source of another forwarded transaction
-        const linkedAsForwardedIds = await this.db
+        const linkedAsForwardedIds = await this.getDb()
           .select({ forwardedTransactionId: transactions.forwardedTransactionId })
           .from(transactions)
           .where(sql`${transactions.forwardedTransactionId} IS NOT NULL`);
@@ -397,14 +398,14 @@ export class TransactionsRepository {
   }
 
   async linkForwarded(ccTransactionId: number, appTransactionId: number): Promise<void> {
-    await this.db
+    await this.getDb()
       .update(transactions)
       .set({ forwardedTransactionId: appTransactionId })
       .where(eq(transactions.id, ccTransactionId));
   }
 
   async unlinkForwarded(id: number): Promise<void> {
-    await this.db
+    await this.getDb()
       .update(transactions)
       .set({ forwardedTransactionId: null })
       .where(eq(transactions.id, id));
@@ -412,7 +413,7 @@ export class TransactionsRepository {
 
   async findTransactionsWithForwardedLink(ids: number[]): Promise<Transaction[]> {
     if (ids.length === 0) return [];
-    return await this.db
+    return await this.getDb()
       .select()
       .from(transactions)
       .where(inArray(transactions.forwardedTransactionId, ids));
@@ -436,7 +437,7 @@ export class TransactionsRepository {
         // - Have same total amount
         // - Are within ±2 days
         // - Don't already have forwardedTransactionId set (not yet linked)
-        const candidates = await this.db
+        const candidates = await this.getDb()
           .select()
           .from(transactions)
           .where(
@@ -462,44 +463,41 @@ export class TransactionsRepository {
       reverseCcMatchId?: number;      // CC → App link
     }>,
   ): Promise<{ created: Transaction[]; createdIds: number[] }> {
-    return await this.db.transaction(async (tx) => {
-      // 1. Insert all transactions
-      const created = await tx.insert(transactions)
-        .values(transactionsData)
-        .returning();
+    const db = this.getDb();
 
-      const createdIds = created.map(t => t.id);
+    const created = await db.insert(transactions)
+      .values(transactionsData)
+      .returning();
 
-      // 2. Link transfers (bidirectional)
-      for (const link of links) {
-        if (link.matchedTransactionId && created[link.index]) {
-          const newId = created[link.index].id;
-          const matchedId = link.matchedTransactionId;
-          await tx.update(transactions)
-            .set({
-              linkedTransferId: sql`CASE
-                WHEN ${transactions.id} = ${newId} THEN ${matchedId}
-                WHEN ${transactions.id} = ${matchedId} THEN ${newId}
-              END`,
-            })
-            .where(inArray(transactions.id, [newId, matchedId]));
-        }
+    const createdIds = created.map(t => t.id);
+
+    for (const link of links) {
+      if (link.matchedTransactionId && created[link.index]) {
+        const newId = created[link.index].id;
+        const matchedId = link.matchedTransactionId;
+        await db.update(transactions)
+          .set({
+            linkedTransferId: sql`CASE
+              WHEN ${transactions.id} = ${newId} THEN ${matchedId}
+              WHEN ${transactions.id} = ${matchedId} THEN ${newId}
+            END`,
+          })
+          .where(inArray(transactions.id, [newId, matchedId]));
       }
+    }
 
-      // 3. Link reverse CC matches (update existing CC → new app transaction)
-      for (const link of links) {
-        if (link.reverseCcMatchId && created[link.index]) {
-          const appTransaction = created[link.index];
-          await tx.update(transactions)
-            .set({
-              forwardedTransactionId: appTransaction.id,
-              category: appTransaction.category,  // Sync category
-            })
-            .where(eq(transactions.id, link.reverseCcMatchId));
-        }
+    for (const link of links) {
+      if (link.reverseCcMatchId && created[link.index]) {
+        const appTransaction = created[link.index];
+        await db.update(transactions)
+          .set({
+            forwardedTransactionId: appTransaction.id,
+            category: appTransaction.category,
+          })
+          .where(eq(transactions.id, link.reverseCcMatchId));
       }
+    }
 
-      return { created, createdIds };
-    });
+    return { created, createdIds };
   }
 }

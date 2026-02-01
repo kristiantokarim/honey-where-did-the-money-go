@@ -34,3 +34,5 @@ export const transactions = pgTable(
 
 export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
+
+export * from './schema/scan-sessions';

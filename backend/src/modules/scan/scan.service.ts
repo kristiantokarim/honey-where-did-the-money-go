@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Inject,
   Logger,
   BadRequestException,
   NotFoundException,
@@ -9,6 +10,8 @@ import { ScanRepository } from './scan.repository';
 import { ParseQueueService } from './parse-queue.service';
 import { TransactionsRepository } from '../transactions/transactions.repository';
 import { StorageService } from '../storage/storage.service';
+import { DATABASE_TOKEN } from '../../database/database.provider';
+import { Database } from '../../database/base.repository';
 import {
   SessionStatus,
   ParseStatus,
@@ -57,6 +60,8 @@ export class ScanService {
     private readonly parseQueue: ParseQueueService,
     private readonly transactionsRepository: TransactionsRepository,
     private readonly storageService: StorageService,
+    @Inject(DATABASE_TOKEN)
+    private readonly db: Database,
   ) {}
 
   async createSession(
@@ -362,39 +367,42 @@ export class ScanService {
       reverseCcMatchId: item.reverseCcMatchId,
     }));
 
-    let created: { id: number }[] = [];
-    if (transactionsToInsert.length > 0) {
-      const result = await this.transactionsRepository.createManyWithLinks(
-        transactionsToInsert,
-        links,
-      );
-      created = result.created;
-    }
-
-    await this.repository.markPageConfirmed(page.id);
-
     const totalPages = await this.repository.countTotalPages(sessionId);
     const nextPageIndex = pageIndex + 1;
     const sessionCompleted = nextPageIndex >= totalPages;
 
-    if (sessionCompleted) {
-      await this.repository.updateSession(sessionId, {
-        status: SessionStatus.Completed,
-        currentPageIndex: pageIndex,
-      });
-    } else {
-      await this.repository.updateSession(sessionId, {
-        currentPageIndex: nextPageIndex,
-      });
-    }
+    const result = await this.db.transaction(async (tx) => {
+      let created: { id: number }[] = [];
+      if (transactionsToInsert.length > 0) {
+        const insertResult = await this.transactionsRepository
+          .withTx(tx)
+          .createManyWithLinks(transactionsToInsert, links);
+        created = insertResult.created;
+      }
+
+      await this.repository.withTx(tx).markPageConfirmed(page.id);
+
+      if (sessionCompleted) {
+        await this.repository.withTx(tx).updateSession(sessionId, {
+          status: SessionStatus.Completed,
+          currentPageIndex: pageIndex,
+        });
+      } else {
+        await this.repository.withTx(tx).updateSession(sessionId, {
+          currentPageIndex: nextPageIndex,
+        });
+      }
+
+      return { created };
+    });
 
     this.logger.log(
-      `Confirmed page ${pageIndex} for session ${sessionId}: ${created.length} transactions`,
+      `Confirmed page ${pageIndex} for session ${sessionId}: ${result.created.length} transactions`,
     );
 
     return {
       success: true,
-      createdCount: created.length,
+      createdCount: result.created.length,
       nextPageIndex: sessionCompleted ? null : nextPageIndex,
       sessionCompleted,
     };
