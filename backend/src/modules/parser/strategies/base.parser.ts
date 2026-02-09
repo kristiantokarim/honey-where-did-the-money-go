@@ -5,6 +5,9 @@ import { ParsedTransaction } from '../../../common/dtos/parse-result.dto';
 import { Category, PaymentApp, TransactionType } from '../../../common/enums';
 import { applyCategoryOverrides } from '../category-overrides';
 
+const SYSTEM_PROMPT =
+  'You extract financial transaction data from receipt/payment app screenshots. Return only valid JSON matching the requested schema.';
+
 export abstract class BaseParser implements IPaymentParser {
   protected readonly logger = new Logger(this.constructor.name);
 
@@ -21,7 +24,9 @@ export abstract class BaseParser implements IPaymentParser {
     mimeType: string,
   ): Promise<ParsedTransaction[]> {
     const prompt = this.buildFullPrompt();
-    const response = await provider.analyzeImage(prompt, imageData, mimeType);
+    const response = await provider.analyzeImage(prompt, imageData, mimeType, {
+      systemPrompt: SYSTEM_PROMPT,
+    });
     const transactions = this.extractJson(response.text);
     return applyCategoryOverrides(transactions);
   }

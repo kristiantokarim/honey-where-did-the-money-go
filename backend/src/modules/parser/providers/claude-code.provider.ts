@@ -3,7 +3,7 @@ import { spawn } from 'child_process';
 import { writeFile, unlink } from 'fs/promises';
 import { randomUUID } from 'crypto';
 import * as path from 'path';
-import { IAIProvider } from './ai-provider.interface';
+import { AnalyzeImageOptions, IAIProvider } from './ai-provider.interface';
 
 @Injectable()
 export class ClaudeCodeProvider implements IAIProvider {
@@ -14,6 +14,7 @@ export class ClaudeCodeProvider implements IAIProvider {
     prompt: string,
     imageData: string,
     mimeType: string,
+    options?: AnalyzeImageOptions,
   ): Promise<{ text: string }> {
     const ext = mimeType.split('/')[1] || 'png';
     const filename = `receipt-${randomUUID()}.${ext}`;
@@ -25,20 +26,40 @@ export class ClaudeCodeProvider implements IAIProvider {
       this.logger.log(`Temp image saved: ${tempPath}`);
 
       // Call claude CLI with -p (print mode, non-interactive)
-      const fullPrompt = `Read and analyze the receipt image at ${tempPath}. ${prompt}`;
+      const fullPrompt = `Read and analyze the transaction history image at ${tempPath}. ${prompt}`;
 
-      const result = await this.runClaude(fullPrompt);
-      return { text: result };
+      const result = await this.runClaude(fullPrompt, options);
+      this.logger.debug("raw result:", result)
+      const parsed = JSON.parse(result);
+
+      const cost = parsed.cost_usd ?? parsed.total_cost_usd;
+      const duration = parsed.duration_ms;
+      const input = parsed.usage?.input_tokens;
+      const output = parsed.usage?.output_tokens;
+      this.logger.log(
+        `Cost: $${cost?.toFixed(4) ?? '?'} | Duration: ${duration ? (duration / 1000).toFixed(1) + 's' : '?'} | Tokens: ${input ?? '?'} in / ${output ?? '?'} out`,
+      );
+
+      return { text: parsed.result };
     } finally {
       // Cleanup temp file
       await unlink(tempPath).catch(() => {});
     }
   }
 
-  private runClaude(prompt: string): Promise<string> {
+  private runClaude(prompt: string, options?: AnalyzeImageOptions): Promise<string> {
     return new Promise((resolve, reject) => {
-      // Pass prompt as argument array - no shell escaping needed
-      const args = ['-p', prompt, '--allowedTools', 'Read'];
+      const args = [
+        '-p', prompt,
+        '--model', 'claude-haiku-4-5-20251001',
+        '--allowedTools', 'Read',
+        '--output-format', 'json',
+        '--no-session-persistence',
+      ];
+
+      if (options?.systemPrompt) {
+        args.push('--system-prompt', options.systemPrompt);
+      }
 
       this.logger.log(`Running claude CLI...`);
       const startTime = Date.now();

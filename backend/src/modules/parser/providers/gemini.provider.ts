@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenAI } from '@google/genai';
-import { IAIProvider } from './ai-provider.interface';
+import { AnalyzeImageOptions, IAIProvider } from './ai-provider.interface';
 
 @Injectable()
 export class GeminiProvider implements IAIProvider {
@@ -22,6 +22,7 @@ export class GeminiProvider implements IAIProvider {
     prompt: string,
     imageData: string,
     mimeType: string,
+    options?: AnalyzeImageOptions,
   ): Promise<{ text: string }> {
     if (!this.client) {
       throw new Error('Gemini not configured - set GOOGLE_API_KEY');
