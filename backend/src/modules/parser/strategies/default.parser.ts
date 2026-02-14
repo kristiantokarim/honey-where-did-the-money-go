@@ -24,4 +24,9 @@ Try to categorize each transaction as:
 - Shopping
 - Others`;
   }
+
+  getRulesSummary(): string {
+    return `[Unknown/Other]
+- Generic extraction: dates, amounts (any currency), merchant/recipient names, descriptions`;
+  }
 }

@@ -32,4 +32,10 @@ For each transaction, identify:
 - Amount (distinguish between debit and credit)
 - Transaction type/category`;
   }
+
+  getRulesSummary(): string {
+    return `[Danamon]
+- D-Bank PRO: Transfer (BI-Fast/SKN/RTGS), QRIS, Card, Bills, Purchases
+- Debit/Credit indicator, amount in Rupiah`;
+  }
 }

@@ -1,10 +1,11 @@
 import { Link, useLocation } from '@tanstack/react-router';
-import { ScanLine, LayoutList, PieChart } from 'lucide-react';
+import { ScanLine, LayoutList, PieChart, Settings } from 'lucide-react';
 
 const tabs = [
   { path: '/scan', label: 'Scan', icon: ScanLine },
   { path: '/ledger', label: 'Ledger', icon: LayoutList },
   { path: '/dashboard', label: 'Dash', icon: PieChart },
+  { path: '/settings', label: 'Settings', icon: Settings },
 ] as const;
 
 export function TabNav() {

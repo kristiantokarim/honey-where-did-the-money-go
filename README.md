@@ -163,10 +163,14 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 - Automatically excludes marked transactions from calculations
 - Click any category to drill down and see individual transactions (sorted by amount)
 
-### Multi-User Support
-- Supports multiple users (configurable via backend)
-- User selector on scan page
-- Default user assignment for scanned items
+### Household System
+- **Roles**: Owner (invite members, remove members, full control) vs Member (view, contribute)
+- **Data scoping**: All transactions and scans scoped to active household via `X-Household-Id` header
+- **Multiple households**: Users can belong to multiple households and switch between them
+- **Invite flow**: Owner sends invite by email with 7-day token expiration
+- **Invitation visibility**: Owners see pending sent invitations; recipients see incoming invitations with accept/decline in Settings
+- **When a member leaves**: Transactions stay with the household
+- User selector on scan page for assigning transactions
 - Filter transactions by user in ledger
 
 ### Categories
@@ -203,6 +207,36 @@ GOOGLE_API_KEY=your_gemini_api_key_here
 | DELETE | `/transactions/:id` | Delete a transaction |
 | DELETE | `/transactions/:id/link` | Unlink matched transfer pair |
 
+## Household API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/households` | List user's households |
+| POST | `/households` | Create household |
+| GET | `/households/my-invitations` | List received invitations |
+| DELETE | `/households/my-invitations/:invitationId` | Decline invitation |
+| POST | `/households/accept-invitation` | Accept invitation |
+| GET | `/households/:id/members` | List members (members only) |
+| GET | `/households/:id/invitations` | List sent invitations (owner only) |
+| DELETE | `/households/:id/invitations/:invitationId` | Cancel invitation (owner only) |
+| POST | `/households/:id/invite` | Invite by email (owner only) |
+| DELETE | `/households/:id/members/:userId` | Remove member (owner only) |
+| POST | `/households/:id/leave` | Leave household |
+
+## Auth API
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/register` | Register new user |
+| POST | `/auth/login` | Login |
+| POST | `/auth/logout` | Logout (invalidate refresh token) |
+| POST | `/auth/refresh` | Refresh access token |
+| POST | `/auth/verify-email` | Verify email with token |
+| POST | `/auth/resend-verification` | Resend verification email |
+| POST | `/auth/forgot-password` | Request password reset |
+| POST | `/auth/reset-password` | Reset password with token |
+| GET | `/auth/me` | Get current user |
+
 ---
 
 ## Architecture
@@ -220,7 +254,14 @@ frontend/src/
 │   ├── index.tsx               # Redirect to /scan
 │   ├── scan.tsx                # Upload & parse receipts
 │   ├── ledger.tsx              # Transaction history
-│   └── dashboard.tsx           # Spending analytics
+│   ├── dashboard.tsx           # Spending analytics
+│   ├── settings.tsx            # Account & household management
+│   ├── login.tsx               # Login page
+│   ├── register.tsx            # Registration page
+│   ├── forgot-password.tsx     # Password reset request
+│   ├── reset-password.tsx      # Password reset form
+│   ├── verify-email.tsx        # Email verification
+│   └── accept-invitation.tsx   # Household invite acceptance
 │
 ├── components/                 # UI components by feature
 │   ├── common/                 # Shared (ConfirmDialog)
@@ -232,6 +273,9 @@ frontend/src/
 │
 ├── context/                    # React Context providers
 │   ├── AppContext.tsx          # Config, user state
+│   ├── AuthContext.tsx         # Authentication state
+│   ├── HouseholdContext.tsx    # Household & member state
+│   ├── ScanSessionContext.tsx  # Scan session state
 │   ├── TransactionContext.tsx  # Transaction data
 │   └── ToastContext.tsx        # Toast notifications
 │
@@ -241,7 +285,10 @@ frontend/src/
 │
 ├── services/                   # API layer
 │   ├── api.ts                  # Axios instance
+│   ├── auth.ts                 # Auth endpoints
 │   ├── config.ts               # Config endpoint
+│   ├── household.ts            # Household endpoints
+│   ├── scanSession.ts          # Scan session endpoints
 │   └── transactions.ts         # Transaction endpoints
 │
 ├── types/                      # TypeScript interfaces
@@ -272,6 +319,20 @@ backend/src/
 │   └── migrations/
 │
 └── modules/
+    ├── auth/                         # Authentication & email
+    │   ├── auth.module.ts
+    │   ├── auth.controller.ts
+    │   ├── auth.service.ts
+    │   ├── email.service.ts
+    │   ├── guards/                   # JWT auth guards
+    │   └── decorators.ts             # @CurrentUser, @SkipHousehold
+    │
+    ├── household/                    # Household management
+    │   ├── household.module.ts
+    │   ├── household.controller.ts
+    │   ├── household.service.ts
+    │   └── household.repository.ts
+    │
     ├── parser/                       # Receipt parsing (Strategy Pattern)
     │   ├── parser.module.ts
     │   ├── parser.service.ts         # Orchestrator
@@ -423,8 +484,7 @@ docker compose down -v
 ## Future Plans
 
 ### Core Features
-- [ ] Multi-household/tenant support with authentication
-- [ ] Configurable categories, users, and payment methods per household
+- [ ] Configurable categories and payment methods per household
 
 ### Input Methods
 - [ ] Ability to accept Bank Statement PDF parsing

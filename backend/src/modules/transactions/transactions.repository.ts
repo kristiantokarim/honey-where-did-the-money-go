@@ -16,11 +16,15 @@ export class TransactionsRepository extends BaseRepository {
     super(db);
   }
 
-  async findById(id: number): Promise<Transaction | undefined> {
+  async findById(id: number, householdId?: string): Promise<Transaction | undefined> {
+    const conditions = [eq(transactions.id, id)];
+    if (householdId) {
+      conditions.push(eq(transactions.householdId, householdId));
+    }
     const [result] = await this.getDb()
       .select()
       .from(transactions)
-      .where(eq(transactions.id, id));
+      .where(and(...conditions));
     return result;
   }
 
@@ -48,11 +52,16 @@ export class TransactionsRepository extends BaseRepository {
     by?: string,
     sortBy?: SortBy,
     payment?: PaymentApp,
+    householdId?: string,
   ): Promise<Transaction[]> {
     const conditions = [
       gte(transactions.date, startDate),
       lte(transactions.date, endDate),
     ];
+
+    if (householdId) {
+      conditions.push(eq(transactions.householdId, householdId));
+    }
 
     if (category) {
       conditions.push(eq(transactions.category, category));
@@ -97,6 +106,7 @@ export class TransactionsRepository extends BaseRepository {
 
   async checkDuplicates(
     items: Array<{ date: string; total: number; to: string; expense?: string; payment: PaymentApp }>,
+    householdId?: string,
   ): Promise<Array<{ exists: boolean; matchedId?: number }>> {
     this.logger.debug(`Checking duplicates for ${items.length} items`);
 
@@ -107,16 +117,19 @@ export class TransactionsRepository extends BaseRepository {
         );
 
         // Find candidates with same date, total, and payment app (duplicates only happen within same app)
+        const candidateConditions = [
+          eq(transactions.date, item.date),
+          eq(transactions.total, item.total),
+          eq(transactions.payment, item.payment),
+        ];
+        if (householdId) {
+          candidateConditions.push(eq(transactions.householdId, householdId));
+        }
+
         const candidates = await this.getDb()
           .select()
           .from(transactions)
-          .where(
-            and(
-              eq(transactions.date, item.date),
-              eq(transactions.total, item.total),
-              eq(transactions.payment, item.payment),
-            ),
-          );
+          .where(and(...candidateConditions));
 
         if (candidates.length === 0) {
           this.logger.debug('No candidates found with same date, total, and payment app');
@@ -180,6 +193,7 @@ export class TransactionsRepository extends BaseRepository {
     endDate: string,
     by?: string,
     payment?: PaymentApp,
+    householdId?: string,
   ): Promise<Array<{ name: string; total: number }>> {
     const conditions = [
       sql`${transactions.isExcluded} = false`,
@@ -187,6 +201,10 @@ export class TransactionsRepository extends BaseRepository {
       gte(transactions.date, startDate),
       lte(transactions.date, endDate),
     ];
+
+    if (householdId) {
+      conditions.push(eq(transactions.householdId, householdId));
+    }
 
     // Only exclude linked transactions when NOT filtering by payment.
     // When payment filter is active, double-counting is prevented by the filter itself
@@ -228,12 +246,17 @@ export class TransactionsRepository extends BaseRepository {
     category?: string,
     by?: string,
     payment?: PaymentApp,
+    householdId?: string,
   ): Promise<{ total: number }> {
     const conditions = [
       sql`${transactions.isExcluded} = false`,
       gte(transactions.date, startDate),
       lte(transactions.date, endDate),
     ];
+
+    if (householdId) {
+      conditions.push(eq(transactions.householdId, householdId));
+    }
 
     // Only exclude linked transactions when NOT filtering by payment.
     // When payment filter is active, double-counting is prevented by the filter itself
@@ -288,6 +311,7 @@ export class TransactionsRepository extends BaseRepository {
 
   async findPotentialTransferMatches(
     items: Array<{ transactionType: TransactionType; total: number; date: string; payment: PaymentApp }>,
+    householdId?: string,
   ): Promise<Array<{ index: number; match: Transaction | null }>> {
     return await Promise.all(
       items.map(async (item, index) => {
@@ -308,19 +332,22 @@ export class TransactionsRepository extends BaseRepository {
         const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
         // Find candidates: opposite type, same amount, within ±1 day, different app, not already linked
+        const candidateConditions = [
+          eq(transactions.transactionType, oppositeType),
+          eq(transactions.total, item.total),
+          gte(transactions.date, formatDate(dayBefore)),
+          lte(transactions.date, formatDate(dayAfter)),
+          sql`${transactions.payment} != ${item.payment}`,
+          sql`${transactions.linkedTransferId} IS NULL`,
+        ];
+        if (householdId) {
+          candidateConditions.push(eq(transactions.householdId, householdId));
+        }
+
         const candidates = await this.getDb()
           .select()
           .from(transactions)
-          .where(
-            and(
-              eq(transactions.transactionType, oppositeType),
-              eq(transactions.total, item.total),
-              gte(transactions.date, formatDate(dayBefore)),
-              lte(transactions.date, formatDate(dayAfter)),
-              sql`${transactions.payment} != ${item.payment}`,
-              sql`${transactions.linkedTransferId} IS NULL`,
-            ),
-          );
+          .where(and(...candidateConditions));
 
         if (candidates.length === 0) {
           return { index, match: null };
@@ -357,6 +384,7 @@ export class TransactionsRepository extends BaseRepository {
 
   async findForwardedMatchCandidates(
     items: Array<{ forwardedFromApp: PaymentApp; total: number; date: string }>,
+    householdId?: string,
   ): Promise<Array<{ index: number; candidates: Transaction[] }>> {
     return await Promise.all(
       items.map(async (item, index) => {
@@ -370,23 +398,31 @@ export class TransactionsRepository extends BaseRepository {
         const formatDate = (d: Date) => d.toISOString().split('T')[0];
 
         // Find candidates: same app, same amount, within ±2 days, not already linked as forwarded
+        const candidateConditions = [
+          eq(transactions.payment, item.forwardedFromApp),
+          eq(transactions.total, item.total),
+          gte(transactions.date, formatDate(daysBefore)),
+          lte(transactions.date, formatDate(daysAfter)),
+        ];
+        if (householdId) {
+          candidateConditions.push(eq(transactions.householdId, householdId));
+        }
+
         const candidates = await this.getDb()
           .select()
           .from(transactions)
-          .where(
-            and(
-              eq(transactions.payment, item.forwardedFromApp),
-              eq(transactions.total, item.total),
-              gte(transactions.date, formatDate(daysBefore)),
-              lte(transactions.date, formatDate(daysAfter)),
-            ),
-          );
+          .where(and(...candidateConditions));
 
         // Filter out transactions that are already linked as the source of another forwarded transaction
+        const linkedConditions = [sql`${transactions.forwardedTransactionId} IS NOT NULL`];
+        if (householdId) {
+          linkedConditions.push(eq(transactions.householdId, householdId));
+        }
+
         const linkedAsForwardedIds = await this.getDb()
           .select({ forwardedTransactionId: transactions.forwardedTransactionId })
           .from(transactions)
-          .where(sql`${transactions.forwardedTransactionId} IS NOT NULL`);
+          .where(and(...linkedConditions));
 
         const linkedIds = new Set(
           linkedAsForwardedIds.map((t) => t.forwardedTransactionId),
@@ -437,6 +473,7 @@ export class TransactionsRepository extends BaseRepository {
 
   async findReverseForwardedMatchCandidates(
     items: Array<{ payment: PaymentApp; total: number; date: string }>,
+    householdId?: string,
   ): Promise<Array<{ index: number; candidates: Transaction[] }>> {
     return await Promise.all(
       items.map(async (item, index) => {
@@ -453,18 +490,21 @@ export class TransactionsRepository extends BaseRepository {
         // - Have same total amount
         // - Are within ±2 days
         // - Don't already have forwardedTransactionId set (not yet linked)
+        const candidateConditions = [
+          eq(transactions.forwardedFromApp, item.payment),
+          eq(transactions.total, item.total),
+          gte(transactions.date, formatDate(daysBefore)),
+          lte(transactions.date, formatDate(daysAfter)),
+          sql`${transactions.forwardedTransactionId} IS NULL`,
+        ];
+        if (householdId) {
+          candidateConditions.push(eq(transactions.householdId, householdId));
+        }
+
         const candidates = await this.getDb()
           .select()
           .from(transactions)
-          .where(
-            and(
-              eq(transactions.forwardedFromApp, item.payment),
-              eq(transactions.total, item.total),
-              gte(transactions.date, formatDate(daysBefore)),
-              lte(transactions.date, formatDate(daysAfter)),
-              sql`${transactions.forwardedTransactionId} IS NULL`,
-            ),
-          );
+          .where(and(...candidateConditions));
 
         return { index, candidates };
       }),

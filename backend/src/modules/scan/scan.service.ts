@@ -67,6 +67,7 @@ export class ScanService {
     userId: string,
     files: Express.Multer.File[],
     appTypes?: PaymentApp[],
+    householdId?: string,
   ): Promise<ScanSessionStatusDto> {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + this.sessionExpiryHours);
@@ -74,7 +75,7 @@ export class ScanService {
     const session = await this.db.transaction(async (tx) => {
       const txRepo = this.repository.withTx(tx);
 
-      const existingSession = await txRepo.findActiveSessionByUserForUpdate(userId);
+      const existingSession = await txRepo.findActiveSessionByUserForUpdate(userId, householdId!);
       if (existingSession) {
         throw new ConflictException(
           'An active scan session already exists. Complete or cancel the existing session first.',
@@ -83,6 +84,7 @@ export class ScanService {
 
       return await txRepo.createSession({
         userId,
+        householdId: householdId!,
         status: SessionStatus.InProgress,
         currentPageIndex: 0,
         expiresAt,
@@ -95,6 +97,7 @@ export class ScanService {
           file.buffer,
           file.originalname,
           file.mimetype,
+          householdId,
         );
         const imageUrl = await this.storageService.getUrl(imageKey);
         return {
@@ -151,8 +154,10 @@ export class ScanService {
     };
   }
 
-  async getSession(sessionId: string): Promise<ScanSessionStatusDto> {
-    const session = await this.repository.findSessionById(sessionId);
+  async getSession(sessionId: string, householdId?: string): Promise<ScanSessionStatusDto> {
+    const session = householdId
+      ? await this.repository.findSessionByIdAndHousehold(sessionId, householdId)
+      : await this.repository.findSessionById(sessionId);
     if (!session) {
       throw new NotFoundException('Session not found');
     }
@@ -184,8 +189,8 @@ export class ScanService {
     };
   }
 
-  async getActiveSession(userId: string): Promise<ScanSessionStatusDto | null> {
-    const session = await this.repository.findActiveSessionByUser(userId);
+  async getActiveSession(userId: string, householdId?: string): Promise<ScanSessionStatusDto | null> {
+    const session = await this.repository.findActiveSessionByUser(userId, householdId!);
     if (!session) {
       return null;
     }
@@ -196,14 +201,17 @@ export class ScanService {
       return null;
     }
 
-    return this.getSession(session.id);
+    return this.getSession(session.id, householdId);
   }
 
   async getPageForReview(
     sessionId: string,
     pageIndex: number,
+    householdId?: string,
   ): Promise<PageReviewDto> {
-    const session = await this.repository.findSessionById(sessionId);
+    const session = householdId
+      ? await this.repository.findSessionByIdAndHousehold(sessionId, householdId)
+      : await this.repository.findSessionById(sessionId);
     if (!session) {
       throw new NotFoundException('Session not found');
     }
@@ -326,12 +334,18 @@ export class ScanService {
     sessionId: string,
     pageIndex: number,
     transactions: ConfirmTransactionItemDto[],
+    userId?: string,
+    householdId?: string,
   ): Promise<ConfirmPageResponseDto> {
     const result = await this.db.transaction(async (tx) => {
       const txRepo = this.repository.withTx(tx);
 
       const session = await txRepo.findSessionByIdForUpdate(sessionId);
       if (!session) {
+        throw new NotFoundException('Session not found');
+      }
+
+      if (householdId && session.householdId !== householdId) {
         throw new NotFoundException('Session not found');
       }
 
@@ -367,6 +381,8 @@ export class ScanService {
           quantity: item.quantity || 1,
           imageUrl,
           forwardedTransactionId: forwardedTransactionId,
+          ...(householdId && { householdId }),
+          ...(userId && { createdByUserId: userId }),
         };
       });
 
@@ -416,7 +432,7 @@ export class ScanService {
     };
   }
 
-  async retryParse(sessionId: string): Promise<RetryParseResponseDto> {
+  async retryParse(sessionId: string, householdId?: string): Promise<RetryParseResponseDto> {
     const staleThresholdMs = 60000;
     const staleDate = new Date(Date.now() - staleThresholdMs);
 
@@ -425,6 +441,10 @@ export class ScanService {
 
       const session = await txRepo.findSessionByIdForUpdate(sessionId);
       if (!session) {
+        throw new NotFoundException('Session not found');
+      }
+
+      if (householdId && session.householdId !== householdId) {
         throw new NotFoundException('Session not found');
       }
 
@@ -474,12 +494,16 @@ export class ScanService {
     };
   }
 
-  async cancelSession(sessionId: string): Promise<void> {
+  async cancelSession(sessionId: string, householdId?: string): Promise<void> {
     const imageKeys = await this.db.transaction(async (tx) => {
       const txRepo = this.repository.withTx(tx);
 
       const session = await txRepo.findSessionByIdForUpdate(sessionId);
       if (!session) {
+        throw new NotFoundException('Session not found');
+      }
+
+      if (householdId && session.householdId !== householdId) {
         throw new NotFoundException('Session not found');
       }
 

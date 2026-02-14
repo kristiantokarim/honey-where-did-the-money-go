@@ -27,4 +27,10 @@ For each transaction, identify:
 - Amount (distinguish between outgoing and incoming)
 - Transaction type/category`;
   }
+
+  getRulesSummary(): string {
+    return `[Jago]
+- Types: Transfer Out, Pocket transfers, Card transactions, QRIS, Bills, E-wallet top-ups
+- Red = outgoing, Green = incoming`;
+  }
 }

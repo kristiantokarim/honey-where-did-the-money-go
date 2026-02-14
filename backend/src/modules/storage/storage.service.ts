@@ -33,9 +33,10 @@ export class StorageService implements IStorageService, OnModuleInit {
     }
   }
 
-  async upload(file: Buffer, originalFilename: string, mimeType: string): Promise<string> {
+  async upload(file: Buffer, originalFilename: string, mimeType: string, householdId?: string): Promise<string> {
     const extension = originalFilename.split('.').pop() || 'jpg';
-    const filename = `${randomUUID()}.${extension}`;
+    const prefix = householdId ? `${householdId}/` : '';
+    const filename = `${prefix}${randomUUID()}.${extension}`;
 
     await this.client.putObject(this.bucket, filename, file, file.length, {
       'Content-Type': mimeType,

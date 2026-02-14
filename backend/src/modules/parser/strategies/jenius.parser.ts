@@ -27,4 +27,10 @@ For each transaction, identify:
 - Amount (distinguish between debit and credit)
 - Transaction type/category`;
   }
+
+  getRulesSummary(): string {
+    return `[Jenius]
+- Types: Transfer Out (BI-Fast/RTGS), Card payments (Visa/MC), QR (QRIS), E-wallet top-ups, Bills
+- Amount with +/- indicator for credit/debit`;
+  }
 }

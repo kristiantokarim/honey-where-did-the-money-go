@@ -10,8 +10,8 @@ import { Database } from '../../database/base.repository';
 export class TransactionsService {
   private readonly logger = new Logger(TransactionsService.name);
 
-  private async findByIdOrThrow(id: number): Promise<Transaction> {
-    const transaction = await this.repository.findById(id);
+  private async findByIdOrThrow(id: number, householdId: string): Promise<Transaction> {
+    const transaction = await this.repository.findById(id, householdId);
     if (!transaction) {
       throw new NotFoundException(`Transaction with id ${id} not found`);
     }
@@ -26,9 +26,10 @@ export class TransactionsService {
 
   async getHistory(
     query: DateRangeQueryDto,
+    householdId: string,
   ): Promise<Array<Transaction & { linkedTransaction?: Transaction; forwardedTransaction?: Transaction; forwardedCcTransactions?: Transaction[] }>> {
     const { startDate, endDate, category, by, sortBy, payment } = query;
-    const transactions = await this.repository.findByDateRange(startDate, endDate, category, by, sortBy, payment);
+    const transactions = await this.repository.findByDateRange(startDate, endDate, category, by, sortBy, payment, householdId);
 
     // Collect all linked transfer IDs that need to be fetched
     const linkedIds = transactions
@@ -81,23 +82,28 @@ export class TransactionsService {
     endDate: string,
     by?: string,
     payment?: PaymentApp,
+    householdId?: string,
   ): Promise<Array<{ name: string; total: number }>> {
-    return this.repository.getDashboardData(startDate, endDate, by, payment);
+    return this.repository.getDashboardData(startDate, endDate, by, payment, householdId);
   }
 
   async getLedgerTotal(
     query: LedgerTotalQueryDto,
+    householdId: string,
   ): Promise<{ total: number }> {
     const { startDate, endDate, mode, category, by, payment } = query;
-    return this.repository.getLedgerTotal(startDate, endDate, mode, category, by, payment);
+    return this.repository.getLedgerTotal(startDate, endDate, mode, category, by, payment, householdId);
   }
 
-  async update(id: number, data: UpdateTransactionDto): Promise<Transaction> {
+  async update(id: number, data: UpdateTransactionDto, householdId: string): Promise<Transaction> {
     return await this.db.transaction(async (dbTx) => {
       const txRepo = this.repository.withTx(dbTx);
 
       const [locked] = await txRepo.findByIdsForUpdate([id]);
       if (!locked) {
+        throw new NotFoundException(`Transaction with id ${id} not found`);
+      }
+      if (locked.householdId !== householdId) {
         throw new NotFoundException(`Transaction with id ${id} not found`);
       }
 
@@ -139,12 +145,15 @@ export class TransactionsService {
     }
   }
 
-  async delete(id: number): Promise<void> {
+  async delete(id: number, householdId: string): Promise<void> {
     await this.db.transaction(async (dbTx) => {
       const txRepo = this.repository.withTx(dbTx);
 
       const [locked] = await txRepo.findByIdsForUpdate([id]);
       if (!locked) {
+        throw new NotFoundException(`Transaction with id ${id} not found`);
+      }
+      if (locked.householdId !== householdId) {
         throw new NotFoundException(`Transaction with id ${id} not found`);
       }
 
@@ -181,7 +190,7 @@ export class TransactionsService {
     });
   }
 
-  async unlinkTransfer(id: number): Promise<void> {
+  async unlinkTransfer(id: number, householdId: string): Promise<void> {
     let linkedTransferId: number | null = null;
 
     await this.db.transaction(async (dbTx) => {
@@ -189,6 +198,9 @@ export class TransactionsService {
 
       const [locked] = await txRepo.findByIdsForUpdate([id]);
       if (!locked) {
+        throw new NotFoundException(`Transaction with id ${id} not found`);
+      }
+      if (locked.householdId !== householdId) {
         throw new NotFoundException(`Transaction with id ${id} not found`);
       }
 
@@ -203,7 +215,7 @@ export class TransactionsService {
     this.logger.log(`Unlinked transaction ${id} from ${linkedTransferId}`);
   }
 
-  async linkForwarded(ccTransactionId: number, appTransactionId: number): Promise<void> {
+  async linkForwarded(ccTransactionId: number, appTransactionId: number, householdId: string): Promise<void> {
     await this.db.transaction(async (dbTx) => {
       const txRepo = this.repository.withTx(dbTx);
 
@@ -216,7 +228,13 @@ export class TransactionsService {
       if (!ccTransaction) {
         throw new NotFoundException(`Transaction with id ${ccTransactionId} not found`);
       }
+      if (ccTransaction.householdId !== householdId) {
+        throw new NotFoundException(`Transaction with id ${ccTransactionId} not found`);
+      }
       if (!appTransaction) {
+        throw new NotFoundException(`Transaction with id ${appTransactionId} not found`);
+      }
+      if (appTransaction.householdId !== householdId) {
         throw new NotFoundException(`Transaction with id ${appTransactionId} not found`);
       }
 
@@ -231,7 +249,7 @@ export class TransactionsService {
     this.logger.log(`Linked CC transaction ${ccTransactionId} to app transaction ${appTransactionId}, synced category`);
   }
 
-  async unlinkForwarded(id: number): Promise<void> {
+  async unlinkForwarded(id: number, householdId: string): Promise<void> {
     let forwardedTransactionId: number | null = null;
 
     await this.db.transaction(async (dbTx) => {
@@ -239,6 +257,9 @@ export class TransactionsService {
 
       const [locked] = await txRepo.findByIdsForUpdate([id]);
       if (!locked) {
+        throw new NotFoundException(`Transaction with id ${id} not found`);
+      }
+      if (locked.householdId !== householdId) {
         throw new NotFoundException(`Transaction with id ${id} not found`);
       }
 
@@ -253,8 +274,8 @@ export class TransactionsService {
     this.logger.log(`Unlinked forwarded transaction ${id} from ${forwardedTransactionId}`);
   }
 
-  async findTransferMatchForTransaction(id: number): Promise<Transaction | null> {
-    const tx = await this.findByIdOrThrow(id);
+  async findTransferMatchForTransaction(id: number, householdId: string): Promise<Transaction | null> {
+    const tx = await this.findByIdOrThrow(id, householdId);
 
     if (tx.linkedTransferId) {
       throw new BadRequestException('Transaction is already linked');
@@ -269,13 +290,13 @@ export class TransactionsService {
       total: tx.total,
       date: tx.date,
       payment: tx.payment as PaymentApp,
-    }]);
+    }], householdId);
 
     return matches[0]?.match || null;
   }
 
-  async findForwardedMatchForTransaction(id: number): Promise<Transaction[]> {
-    const tx = await this.findByIdOrThrow(id);
+  async findForwardedMatchForTransaction(id: number, householdId: string): Promise<Transaction[]> {
+    const tx = await this.findByIdOrThrow(id, householdId);
 
     if (!tx.forwardedFromApp) {
       throw new BadRequestException('This transaction has no forwardedFromApp field');
@@ -289,13 +310,13 @@ export class TransactionsService {
       forwardedFromApp: tx.forwardedFromApp as PaymentApp,
       total: tx.total,
       date: tx.date,
-    }]);
+    }], householdId);
 
     return matches[0]?.candidates || [];
   }
 
-  async findReverseCcMatchForTransaction(id: number): Promise<Transaction[]> {
-    const tx = await this.findByIdOrThrow(id);
+  async findReverseCcMatchForTransaction(id: number, householdId: string): Promise<Transaction[]> {
+    const tx = await this.findByIdOrThrow(id, householdId);
 
     if (tx.payment !== PaymentApp.Grab && tx.payment !== PaymentApp.Gojek) {
       throw new BadRequestException('Only Grab or Gojek transactions can find CC matches');
@@ -305,12 +326,12 @@ export class TransactionsService {
       payment: tx.payment,
       total: tx.total,
       date: tx.date,
-    }]);
+    }], householdId);
 
     return matches[0]?.candidates || [];
   }
 
-  async linkTransfer(id: number, matchedId: number): Promise<void> {
+  async linkTransfer(id: number, matchedId: number, householdId: string): Promise<void> {
     await this.db.transaction(async (dbTx) => {
       const txRepo = this.repository.withTx(dbTx);
 
@@ -323,7 +344,13 @@ export class TransactionsService {
       if (!tx) {
         throw new NotFoundException(`Transaction with id ${id} not found`);
       }
+      if (tx.householdId !== householdId) {
+        throw new NotFoundException(`Transaction with id ${id} not found`);
+      }
       if (!matchedTx) {
+        throw new NotFoundException(`Transaction with id ${matchedId} not found`);
+      }
+      if (matchedTx.householdId !== householdId) {
         throw new NotFoundException(`Transaction with id ${matchedId} not found`);
       }
 

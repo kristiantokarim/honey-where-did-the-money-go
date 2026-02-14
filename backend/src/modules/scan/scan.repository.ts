@@ -36,26 +36,36 @@ export class ScanRepository extends BaseRepository {
     return result;
   }
 
-  async findActiveSessionByUser(userId: string): Promise<ScanSession | undefined> {
+  async findSessionByIdAndHousehold(id: string, householdId: string): Promise<ScanSession | undefined> {
+    const [result] = await this.getDb()
+      .select()
+      .from(scanSessions)
+      .where(and(eq(scanSessions.id, id), eq(scanSessions.householdId, householdId)));
+    return result;
+  }
+
+  async findActiveSessionByUser(userId: string, householdId: string): Promise<ScanSession | undefined> {
     const [result] = await this.getDb()
       .select()
       .from(scanSessions)
       .where(
         and(
           eq(scanSessions.userId, userId),
+          eq(scanSessions.householdId, householdId),
           eq(scanSessions.status, SessionStatus.InProgress),
         ),
       );
     return result;
   }
 
-  async findActiveSessionByUserForUpdate(userId: string): Promise<ScanSession | undefined> {
+  async findActiveSessionByUserForUpdate(userId: string, householdId: string): Promise<ScanSession | undefined> {
     const [result] = await this.getDb()
       .select()
       .from(scanSessions)
       .where(
         and(
           eq(scanSessions.userId, userId),
+          eq(scanSessions.householdId, householdId),
           eq(scanSessions.status, SessionStatus.InProgress),
         ),
       )

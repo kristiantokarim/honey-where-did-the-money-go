@@ -54,6 +54,10 @@ export class ParserFactory {
     this.logger.log(`Registered new parser: ${parser.appType}`);
   }
 
+  getAllRulesSummaries(): string {
+    return this.parsers.map((p) => p.getRulesSummary()).join('\n\n');
+  }
+
   /**
    * Get list of all supported app types.
    */

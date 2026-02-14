@@ -4,9 +4,6 @@ import { PaymentApp } from '../enums/payment-app.enum';
 import { SessionStatus, ParseStatus, ReviewStatus } from '../enums/scan-status.enum';
 
 export class CreateScanSessionDto {
-  @IsString()
-  defaultUser: string;
-
   @IsArray()
   @IsOptional()
   @IsEnum(PaymentApp, { each: true })

@@ -21,4 +21,11 @@ For each transaction, identify:
 
 Focus on debit transactions for expense tracking.`;
   }
+
+  getRulesSummary(): string {
+    return `[BCA]
+- m-Banking: m-Transfer, payment transactions
+- "DB" marker = debit (money out), "CR" = credit (money in)
+- Focus on debit transactions for expense tracking`;
+  }
 }

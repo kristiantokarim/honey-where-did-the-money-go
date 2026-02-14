@@ -35,7 +35,7 @@ interface ScanSessionContextValue {
   error: string | null;
 
   createSession: (files: File[]) => Promise<void>;
-  loadActiveSession: (userId?: string) => Promise<boolean>;
+  loadActiveSession: () => Promise<boolean>;
   loadPageForReview: (pageIndex: number) => Promise<void>;
   confirmCurrentPage: () => Promise<void>;
   retryParse: () => Promise<void>;
@@ -176,7 +176,6 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
       try {
         const newSession = await scanSessionService.createSession(
           files,
-          defaultUser,
         );
 
         setSession(newSession);
@@ -194,17 +193,12 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
         showToast('Failed to start scan session', 'error');
       }
     },
-    [defaultUser, showToast, startPolling],
+    [showToast, startPolling],
   );
 
-  const loadActiveSession = useCallback(async (userId?: string): Promise<boolean> => {
-    const userToLoad = userId || defaultUser;
-    if (!userToLoad) {
-      return false;
-    }
-
+  const loadActiveSession = useCallback(async (): Promise<boolean> => {
     try {
-      const activeSession = await scanSessionService.getActiveSession(userToLoad);
+      const activeSession = await scanSessionService.getActiveSession();
 
       if (!activeSession) {
         return false;
@@ -250,7 +244,7 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
       console.error('Load active session failed:', err);
       return false;
     }
-  }, [defaultUser, startPolling, enrichTransactions]);
+  }, [startPolling, enrichTransactions]);
 
   const loadPageForReview = useCallback(
     async (pageIndex: number) => {

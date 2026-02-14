@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider, createRouter } from '@tanstack/react-router';
+import { AuthProvider } from './context/AuthContext';
+import { HouseholdProvider } from './context/HouseholdContext';
 import { AppProvider } from './context/AppContext';
 import { TransactionProvider } from './context/TransactionContext';
 import { ToastProvider } from './context/ToastContext';
@@ -20,13 +22,17 @@ declare module '@tanstack/react-router' {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ToastProvider>
-      <AppProvider>
-        <TransactionProvider>
-          <ScanSessionProvider>
-            <RouterProvider router={router} />
-          </ScanSessionProvider>
-        </TransactionProvider>
-      </AppProvider>
+      <AuthProvider>
+        <HouseholdProvider>
+          <AppProvider>
+            <TransactionProvider>
+              <ScanSessionProvider>
+                <RouterProvider router={router} />
+              </ScanSessionProvider>
+            </TransactionProvider>
+          </AppProvider>
+        </HouseholdProvider>
+      </AuthProvider>
       <ToastContainer />
     </ToastProvider>
   </StrictMode>

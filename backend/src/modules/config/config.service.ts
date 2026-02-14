@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ParserFactory } from '../parser/parser.factory';
 import { Category } from '../../common/enums/category.enum';
+import { HouseholdRepository } from '../household/household.repository';
 
 export interface AppConfig {
   categories: string[];
@@ -10,14 +11,16 @@ export interface AppConfig {
 
 @Injectable()
 export class ConfigAppService {
-  constructor(private readonly parserFactory: ParserFactory) {}
+  constructor(
+    private readonly parserFactory: ParserFactory,
+    private readonly householdRepository: HouseholdRepository,
+  ) {}
 
-  // For now, return static values for categories/users
-  // Later with auth, these will be fetched from database per user/household
-  getConfig(): AppConfig {
+  async getConfig(householdId: string): Promise<AppConfig> {
+    const memberNames = await this.householdRepository.getMemberNames(householdId);
     return {
       categories: Object.values(Category),
-      users: ['Kris', 'Iven'],
+      users: memberNames,
       paymentMethods: this.parserFactory.getSupportedApps(),
     };
   }

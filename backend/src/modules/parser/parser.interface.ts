@@ -6,6 +6,8 @@ export interface IPaymentParser {
   readonly appType: PaymentApp;
   canParse(detectedApp: string): boolean;
   getPrompt(): string;
+  getRulesSummary(): string;
+  postProcess(transactions: ParsedTransaction[]): ParsedTransaction[];
   parse(
     provider: IAIProvider,
     imageData: string,

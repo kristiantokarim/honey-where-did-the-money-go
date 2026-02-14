@@ -1,10 +1,17 @@
 import { pgTable, uuid, text, integer, timestamp, serial, jsonb, index, unique } from 'drizzle-orm/pg-core';
+import { users } from './users';
+import { households } from './households';
 
 export const scanSessions = pgTable(
   'scan_sessions',
   {
     id: uuid('id').defaultRandom().primaryKey(),
-    userId: text('user_id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id),
     status: text('status').notNull().default('in_progress'),
     currentPageIndex: integer('current_page_index').notNull().default(0),
     createdAt: timestamp('created_at').defaultNow(),
@@ -14,6 +21,7 @@ export const scanSessions = pgTable(
   },
   (table) => [
     index('idx_scan_sessions_user_id').on(table.userId),
+    index('idx_scan_sessions_household_id').on(table.householdId),
     index('idx_scan_sessions_status').on(table.status),
     index('idx_scan_sessions_expires_at').on(table.expiresAt),
   ],

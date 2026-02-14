@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { configService } from '../services/config';
 import { useToast } from './ToastContext';
+import { useAuth } from './AuthContext';
+import { useHousehold } from './HouseholdContext';
 import type { AppConfig } from '../types';
 
 interface AppContextValue {
@@ -19,26 +21,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [configError, setConfigError] = useState(false);
   const [defaultUser, setDefaultUser] = useState('');
   const { showToast } = useToast();
+  const { isAuthenticated, user } = useAuth();
+  const { activeHouseholdId } = useHousehold();
+
+  const loadConfig = useCallback(async () => {
+    if (!isAuthenticated || !activeHouseholdId) {
+      setConfigLoading(false);
+      return;
+    }
+
+    setConfigLoading(true);
+    setConfigError(false);
+    try {
+      const data = await configService.getConfig();
+      setConfig(data);
+      // Default to the authenticated user's name if available in the member list
+      const currentUserName = data.users.find((u) => u === user?.name);
+      if (currentUserName) {
+        setDefaultUser(currentUserName);
+      } else if (data.users.length > 0) {
+        setDefaultUser(data.users[0]);
+      }
+    } catch (error) {
+      console.error('Failed to load config:', error);
+      setConfigError(true);
+      showToast('Failed to connect to server', 'error');
+    } finally {
+      setConfigLoading(false);
+    }
+  }, [isAuthenticated, activeHouseholdId, user?.name, showToast]);
 
   useEffect(() => {
-    const loadConfig = async () => {
-      try {
-        const data = await configService.getConfig();
-        setConfig(data);
-        if (data.users.length > 0) {
-          setDefaultUser(data.users[0]);
-        }
-      } catch (error) {
-        console.error('Failed to load config:', error);
-        setConfigError(true);
-        showToast('Failed to connect to server', 'error');
-      } finally {
-        setConfigLoading(false);
-      }
-    };
-
     loadConfig();
-  }, [showToast]);
+  }, [loadConfig]);
 
   return (
     <AppContext.Provider

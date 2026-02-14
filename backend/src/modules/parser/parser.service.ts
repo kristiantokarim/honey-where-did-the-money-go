@@ -3,6 +3,11 @@ import { ParserFactory } from './parser.factory';
 import { AIProviderFactory } from './providers';
 import { ParsedTransaction } from '../../common/dtos/parse-result.dto';
 import { PaymentApp } from '../../common/enums';
+import { BaseParser } from './strategies/base.parser';
+import { applyCategoryOverrides } from './category-overrides';
+
+const SYSTEM_PROMPT =
+  'You extract financial transaction data from receipt/payment app screenshots. Return only valid JSON matching the requested schema.';
 
 @Injectable()
 export class ParserService {
@@ -24,54 +29,34 @@ export class ParserService {
     const base64Data = fileBuffer.toString('base64');
     const provider = this.aiProviderFactory.getDefaultProvider();
 
-    // Step 1: Use provided app type or detect it
-    let appType: string;
     if (providedAppType) {
-      appType = providedAppType;
-      this.logger.log(`Using provided app type: ${appType}`);
-    } else {
-      appType = await this.detectAppType(base64Data, mimeType);
-      this.logger.log(`Detected app type: ${appType}`);
+      this.logger.log(`Using provided app type: ${providedAppType}`);
+      const parser = this.parserFactory.getParser(providedAppType);
+      const transactions = await parser.parse(provider, base64Data, mimeType);
+      this.logger.log(`Parsed ${transactions.length} transactions`);
+      return { appType: parser.appType, transactions };
     }
 
-    // Step 2: Get the appropriate parser using factory
-    const parser = this.parserFactory.getParser(appType);
+    // Combined detect + parse in a single AI call
+    const combinedPrompt = BaseParser.buildCombinedPrompt(
+      this.parserFactory.getAllRulesSummaries(),
+    );
+    const response = await provider.analyzeImage(
+      combinedPrompt,
+      base64Data,
+      mimeType,
+      { systemPrompt: SYSTEM_PROMPT },
+    );
 
-    // Step 3: Parse the image using the selected strategy
-    const transactions = await parser.parse(provider, base64Data, mimeType);
+    const result = BaseParser.extractCombinedJson(response.text, PaymentApp.Unknown);
+    this.logger.log(`Detected app: ${result.app}, extracted ${result.transactions.length} transactions`);
+
+    const parser = this.parserFactory.getParser(result.app);
+    const processed = parser.postProcess(result.transactions);
+    const transactions = applyCategoryOverrides(processed);
     this.logger.log(`Parsed ${transactions.length} transactions`);
 
-    return {
-      appType: parser.appType,
-      transactions,
-    };
-  }
-
-  private async detectAppType(
-    imageData: string,
-    mimeType: string,
-  ): Promise<string> {
-    const provider = this.aiProviderFactory.getDefaultProvider();
-    const supportedApps = this.parserFactory.getSupportedApps();
-    const appList = [...supportedApps, 'Unknown'].join(', ');
-
-    const prompt = `Identify which payment/financial app this screenshot is from.
-
-Look for these visual markers:
-- Gojek: "GoPay Saldo" text, filter buttons (Date/Services/Methods), red fork icons
-- Grab: "Activity" title, bottom nav (Home/Discover/Payment/Activity/Messages), "Reorder" or "Rebook" links
-- Mandiri CC: "Transaksi" title, "e-Billing" link, date range tabs, merchant codes like "GRAB* A-xxx"
-- OVO: Purple theme, "OVO Cash" balance
-- BCA: "m-BCA" or blue BCA branding
-- Dana: "DANA" logo, blue theme
-- Jenius: "Jenius" branding, teal/turquoise theme
-- Jago: "Jago" branding
-- Danamon: "Danamon" branding
-
-Reply with ONLY one word from: ${appList}`;
-
-    const response = await provider.analyzeImage(prompt, imageData, mimeType);
-    return (response.text || 'Unknown').trim();
+    return { appType: parser.appType, transactions };
   }
 
   getSupportedApps(): PaymentApp[] {

@@ -1,4 +1,6 @@
-import { pgTable, serial, text, integer, boolean, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, integer, boolean, timestamp, uuid, index } from 'drizzle-orm/pg-core';
+import { users } from './schema/users';
+import { households } from './schema/households';
 
 export const transactions = pgTable(
   'transactions',
@@ -21,6 +23,12 @@ export const transactions = pgTable(
     linkedTransferId: integer('linked_transfer_id'),
     forwardedTransactionId: integer('forwarded_transaction_id'),
     forwardedFromApp: text('forwarded_from_app'),
+    householdId: uuid('household_id')
+      .notNull()
+      .references(() => households.id),
+    createdByUserId: uuid('created_by_user_id')
+      .notNull()
+      .references(() => users.id),
     createdAt: timestamp('created_at').defaultNow(),
   },
   (table) => [
@@ -29,6 +37,7 @@ export const transactions = pgTable(
     index('idx_transactions_by').on(table.by),
     index('idx_transactions_date_category_by').on(table.date, table.category, table.by),
     index('idx_transactions_type').on(table.transactionType),
+    index('idx_transactions_household_id').on(table.householdId),
   ],
 );
 
@@ -36,3 +45,5 @@ export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 
 export * from './schema/scan-sessions';
+export * from './schema/users';
+export * from './schema/households';

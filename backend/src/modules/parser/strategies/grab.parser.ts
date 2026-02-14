@@ -20,4 +20,10 @@ For each transaction, identify:
 - Service type (Food/Transport/Shopping)
 - Order status (completed/cancelled)`;
   }
+
+  getRulesSummary(): string {
+    return `[Grab]
+- Services: GrabFood (food), GrabCar/GrabBike (transport), GrabMart (grocery), GrabPay
+- Extract: date, restaurant/merchant/destination, amount, service type, order status`;
+  }
 }

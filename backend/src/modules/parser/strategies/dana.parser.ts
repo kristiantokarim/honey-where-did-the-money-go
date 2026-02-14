@@ -25,4 +25,11 @@ For each transaction, identify:
 - Amount (distinguish between outgoing payments and incoming transfers)
 - Transaction type/category`;
   }
+
+  getRulesSummary(): string {
+    return `[Dana]
+- Types: Transfer Out, Payment (merchant/QR), Top-up, Cashback/rewards
+- Amount with "Rp" prefix
+- Status: "Berhasil"/"Success" = completed, "Gagal"/"Failed" = failed`;
+  }
 }

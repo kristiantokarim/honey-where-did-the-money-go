@@ -11,14 +11,12 @@ import { PaymentApp } from '../types/enums';
 export const scanSessionService = {
   createSession: async (
     files: File[],
-    defaultUser: string,
     appTypes?: PaymentApp[],
   ): Promise<ScanSession> => {
     const formData = new FormData();
     files.forEach((file) => {
       formData.append('files', file);
     });
-    formData.append('defaultUser', defaultUser);
     if (appTypes) {
       appTypes.forEach((appType) => {
         formData.append('appTypes[]', appType);
@@ -33,10 +31,8 @@ export const scanSessionService = {
     return response.data;
   },
 
-  getActiveSession: async (userId: string): Promise<ScanSession | null> => {
-    const response = await api.get<ScanSession | null>('/scan/sessions/active', {
-      params: { user: userId },
-    });
+  getActiveSession: async (): Promise<ScanSession | null> => {
+    const response = await api.get<ScanSession | null>('/scan/sessions/active');
     return response.data;
   },
 

@@ -45,6 +45,14 @@ For each transaction, extract:
 - Whether it's a fee, payment, or purchase`;
   }
 
+  getRulesSummary(): string {
+    return `[Mandiri CC]
+- Credit card statement with transaction date, merchant, amount
+- "GRAB* ..." or "GRAB - ..." = Grab via CC
+- "GOPAYID ...", "GOJEK* ...", "PT GOJEK ...", "GO-..." = Gojek/GoPay via CC
+- Keep original description text for pattern matching`;
+  }
+
   async parse(
     provider: IAIProvider,
     imageData: string,
@@ -53,17 +61,15 @@ For each transaction, extract:
     const prompt = this.buildFullPrompt();
     const response = await provider.analyzeImage(prompt, imageData, mimeType);
     const transactions = this.extractJson(response.text);
+    const processed = this.postProcess(transactions);
+    return applyCategoryOverrides(processed);
+  }
 
-    // Detect forwarded transactions based on description patterns
-    const processedTransactions = transactions.map((tx) => {
+  postProcess(transactions: ParsedTransaction[]): ParsedTransaction[] {
+    return transactions.map((tx) => {
       const forwardedFromApp = this.detectForwardedApp(tx.expense);
-      return {
-        ...tx,
-        forwardedFromApp,
-      };
+      return { ...tx, forwardedFromApp };
     });
-
-    return applyCategoryOverrides(processedTransactions);
   }
 
   private detectForwardedApp(description: string): PaymentApp | undefined {

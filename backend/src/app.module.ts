@@ -8,6 +8,8 @@ import { ParserModule } from './modules/parser/parser.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { ConfigAppModule } from './modules/config/config.module';
 import { ScanModule } from './modules/scan/scan.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { HouseholdModule } from './modules/household/household.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { ScanModule } from './modules/scan/scan.module';
     DatabaseModule,
     StorageModule,
     ParserModule,
+    AuthModule,
+    HouseholdModule,
     TransactionsModule,
     ConfigAppModule,
     ScanModule,

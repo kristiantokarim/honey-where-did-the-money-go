@@ -1,5 +1,5 @@
 export interface IStorageService {
-  upload(file: Buffer, filename: string, mimeType: string): Promise<string>;
+  upload(file: Buffer, filename: string, mimeType: string, householdId?: string): Promise<string>;
   getUrl(filename: string): Promise<string>;
   delete(filename: string): Promise<void>;
 }

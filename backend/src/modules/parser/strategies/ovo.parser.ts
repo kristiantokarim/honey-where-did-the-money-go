@@ -23,4 +23,11 @@ For each transaction, identify:
 - Amount
 - Transaction type`;
   }
+
+  getRulesSummary(): string {
+    return `[OVO]
+- Types: Transfer Out, Merchant Payment, Top-up, Cashback
+- Outgoing payments = negative amounts, incoming transfers/cashback = positive
+- Extract: date, recipient/merchant, amount, transaction type`;
+  }
 }
